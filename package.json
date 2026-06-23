@@ -1,0 +1,23 @@
+{
+  "name": "beto-cat-escapes",
+  "version": "1.0.0",
+  "description": "Beto Cat Escapes - 3D endless runner game",
+  "main": "www/index.html",
+  "scripts": {
+    "sync": "npx cap sync",
+    "android": "npx cap open android",
+    "run:android": "cd android && ./gradlew assembleDebug",
+    "run:release": "cd android && ./gradlew assembleRelease",
+    "run:bundle": "cd android && ./gradlew bundleRelease"
+  },
+  "author": "José Lucas Domingues <lucas.domingues16@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor-community/admob": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "appId": "com.tzstudios.betocatescapes",
+  "appName": "Beto Cat Escapes",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "AdMob": {
+      "appId": "ca-app-pub-6497152814228418~7528960636"
+    }
+  }
+}

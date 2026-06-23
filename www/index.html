@@ -1,0 +1,5324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Beto Cat Escapes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Fredoka:wght@500;700&family=Black+Ops+One&display=swap" rel="stylesheet">
+
+<!--
+═══════════════════════════════════════════════════════════════════════════
+  GOOGLE ADSENSE FOR GAMES (H5 GAMES ADS) — INTEGRAÇÃO
+═══════════════════════════════════════════════════════════════════════════
+
+  PASSO 1: Crie conta no AdSense em https://adsense.google.com
+  PASSO 2: Cadastre seu site/jogo e aguarde a aprovação (~dias)
+  PASSO 3: Pegue seu ID de publisher (formato: ca-pub-XXXXXXXXXXXXXXXX)
+  PASSO 4: Cole o ID nos DOIS lugares marcados abaixo:
+           - na tag <script> data-ad-client (logo abaixo)
+           - na constante GOOGLE_AD_CLIENT (no JS no fim do arquivo)
+
+  PASSO 5: Quando publicar PRA VALER, mude:
+           data-adbreak-test="on"   →   REMOVA ESSA LINHA
+           Test mode mostra anúncios de teste do Google.
+═══════════════════════════════════════════════════════════════════════════
+-->
+<script async
+  data-adbreak-test="on"
+  data-ad-frequency-hint="30s"
+  src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+  crossorigin="anonymous">
+</script>
+<script>
+  // Helpers da API do AdSense for Games (H5 Games Ads) - usado no fallback web
+  window.adsbygoogle = window.adsbygoogle || [];
+  window.adBreak = window.adConfig = (o) => adsbygoogle.push(o);
+
+  // ═══════════════════════════════════════════════════════════
+  // 📱 PONTE ADMOB - usado quando rodando dentro do APK Capacitor
+  //    IDs do AdMob:
+  //      App ID:        ca-app-pub-6497152814228418~7528960636
+  //      Rewarded Unit: ca-app-pub-6497152814228418/4902797291
+  // ═══════════════════════════════════════════════════════════
+  window.IS_NATIVE_APP = false;
+  window.ADMOB_READY = false;
+  window.ADMOB_REWARDED_UNIT = 'ca-app-pub-6497152814228418/4902797291';
+  window.ADMOB_INTERSTITIAL_UNIT = 'ca-app-pub-6497152814228418/4902797291'; // mesmo ID por enquanto
+
+  // Detecta se tá rodando dentro do APK (Capacitor)
+  document.addEventListener('deviceready', () => { window.IS_NATIVE_APP = true; }, false);
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    window.IS_NATIVE_APP = true;
+  }
+
+  // Inicializa AdMob assim que o Capacitor estiver pronto
+  async function initAdMobIfNative() {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.AdMob) return;
+    try {
+      const AdMob = window.Capacitor.Plugins.AdMob;
+      await AdMob.initialize({
+        testingDevices: [],
+        initializeForTesting: true,  // mude pra false em produção
+      });
+      // Pré-carrega o rewarded ad
+      await AdMob.prepareRewardVideoAd({
+        adId: window.ADMOB_REWARDED_UNIT,
+        isTesting: true,
+      });
+      window.ADMOB_READY = true;
+      console.log('[AdMob] inicializado, rewarded pré-carregado');
+    } catch (e) {
+      console.warn('[AdMob] erro ao inicializar:', e);
+    }
+  }
+  // Tenta inicializar quando Capacitor carregar
+  setTimeout(initAdMobIfNative, 500);
+  document.addEventListener('DOMContentLoaded', initAdMobIfNative);
+
+  // ═══════════════════════════════════════════════════════════
+  // 🎬 Sobrescreve adBreak quando estamos no app nativo
+  //    Quando estamos no APK, em vez de chamar adsbygoogle (que é Web),
+  //    chamamos os métodos do AdMob via plugin Capacitor.
+  // ═══════════════════════════════════════════════════════════
+  const _webAdBreak = window.adBreak;
+  window.adBreak = async function(opts) {
+    if (!window.IS_NATIVE_APP || !window.Capacitor) {
+      // Modo web - usa AdSense for Games normal
+      return _webAdBreak(opts);
+    }
+    const AdMob = window.Capacitor.Plugins.AdMob;
+    if (!AdMob) {
+      // Plugin não disponível - chama callbacks pra continuar fluxo
+      if (opts.adBreakDone) opts.adBreakDone({ breakStatus: 'noAdPreloaded' });
+      return;
+    }
+    try {
+      if (opts.beforeAd) opts.beforeAd();
+
+      if (opts.type === 'reward') {
+        // Mostra rewarded ad
+        if (!window.ADMOB_READY) {
+          await AdMob.prepareRewardVideoAd({
+            adId: window.ADMOB_REWARDED_UNIT,
+            isTesting: true,
+          });
+        }
+        let earned = false;
+        AdMob.addListener('onRewardedVideoAdReward', () => { earned = true; });
+        const result = await AdMob.showRewardVideoAd().catch(e => {
+          console.warn('[AdMob] rewarded falhou:', e);
+          return null;
+        });
+        if (opts.afterAd) opts.afterAd();
+        if (earned && opts.adViewed) opts.adViewed();
+        else if (opts.adDismissed) opts.adDismissed();
+        if (opts.adBreakDone) opts.adBreakDone({ breakStatus: earned ? 'viewed' : 'dismissed' });
+        // Pré-carrega o próximo
+        AdMob.prepareRewardVideoAd({
+          adId: window.ADMOB_REWARDED_UNIT,
+          isTesting: true,
+        }).catch(() => {});
+      } else {
+        // Interstitial / preroll / next - usa interstitial
+        try {
+          await AdMob.prepareInterstitial({
+            adId: window.ADMOB_INTERSTITIAL_UNIT,
+            isTesting: true,
+          });
+          await AdMob.showInterstitial();
+        } catch (e) {
+          console.warn('[AdMob] interstitial falhou:', e);
+        }
+        if (opts.afterAd) opts.afterAd();
+        if (opts.adBreakDone) opts.adBreakDone({ breakStatus: 'viewed' });
+      }
+    } catch (e) {
+      console.error('[AdMob] erro:', e);
+      if (opts.afterAd) opts.afterAd();
+      if (opts.adBreakDone) opts.adBreakDone({ breakStatus: 'error' });
+    }
+  };
+</script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Fredoka', system-ui, -apple-system, sans-serif;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    color: white;
+  }
+  #game-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    inset: 0;
+  }
+
+  /* ======= TZ STUDIOS SPLASH ======= */
+  #wolf-splash {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at center, #1a4d8c 0%, #0d2645 80%, #050b14 100%);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    opacity: 0;
+    animation: splashIn 0.6s ease-out 0.1s forwards,
+               splashOut 0.6s ease-in 2.3s forwards;
+  }
+  #wolf-splash.done { display: none; }
+  @keyframes splashIn { to { opacity: 1; } }
+  @keyframes splashOut { to { opacity: 0; visibility: hidden; } }
+
+  .wolf-icon {
+    width: clamp(140px, 38vw, 200px);
+    height: clamp(140px, 38vw, 200px);
+    filter: drop-shadow(0 0 30px rgba(255, 180, 80, 0.7));
+    animation: wolfPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes wolfPulse {
+    0%, 100% { transform: scale(1) rotate(-2deg); }
+    50% { transform: scale(1.08) rotate(2deg); }
+  }
+
+  .splash-title {
+    font-family: 'Black Ops One', 'Bungee', sans-serif;
+    font-size: clamp(38px, 11vw, 58px);
+    letter-spacing: 4px;
+    color: #FFD700;
+    text-shadow:
+      0 0 20px rgba(255, 200, 80, 0.6),
+      3px 3px 0 #0d2645;
+    line-height: 1;
+  }
+  .splash-sub {
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(18px, 5vw, 26px);
+    letter-spacing: 12px;
+    color: #FFD0D0;
+    margin-top: -6px;
+    text-indent: 12px;
+  }
+  .splash-bar {
+    width: clamp(100px, 30vw, 160px);
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #FF5050, transparent);
+    margin-top: 8px;
+  }
+
+  /* ======= HUD ======= */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: 18px;
+    padding-top: max(18px, env(safe-area-inset-top));
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #hud.hidden { display: none; }
+  #score-block { display: flex; flex-direction: column; gap: 4px; }
+  #score {
+    font-family: 'Bungee', 'Fredoka', sans-serif;
+    font-size: clamp(34px, 10vw, 52px);
+    color: white;
+    line-height: 0.9;
+    text-shadow:
+      3px 3px 0 #1a4d8c,
+      -2px -2px 0 #1a4d8c, 2px -2px 0 #1a4d8c, -2px 2px 0 #1a4d8c,
+      0 6px 12px rgba(0,0,0,0.4);
+  }
+  #level-tag {
+    font-family: 'Bungee', sans-serif;
+    font-size: 14px;
+    letter-spacing: 1px;
+    color: white;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 2px solid white;
+    align-self: flex-start;
+  }
+  #hearts-row {
+    display: flex;
+    gap: 2px;
+    margin-top: 6px;
+    font-size: 17px;
+    line-height: 1;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+  #hearts-row .heart-lost { opacity: 0.4; }
+
+  /* Mundos visitados no menu */
+  #worlds-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin: 4px 16px 14px;
+    max-width: 92%;
+  }
+  .world-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,255,255,0.92);
+    color: #1a4d8c;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 2px solid #FFD700;
+    font-family: 'Bungee', sans-serif;
+    font-size: 11px;
+    letter-spacing: 1.2px;
+  }
+  .world-chip.locked {
+    background: rgba(60,60,60,0.7);
+    color: #999;
+    border-color: #555;
+  }
+  .world-chip .flag { font-size: 14px; }
+
+  /* Seletor de skin do gato */
+  #skin-selector {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 8px 0 4px;
+  }
+  .skin-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.5);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    position: relative;
+    transition: transform 0.12s ease;
+    flex-shrink: 0;
+  }
+  .skin-circle:active { transform: scale(0.92); }
+  .skin-circle.selected {
+    border-color: #FFD700;
+    box-shadow: 0 0 0 4px rgba(255,215,0,0.3);
+    transform: scale(1.1);
+  }
+  .skin-circle.locked {
+    filter: grayscale(0.7) brightness(0.6);
+  }
+  .skin-circle.locked::after {
+    content: '🔒';
+    position: absolute;
+    bottom: -6px;
+    right: -6px;
+    font-size: 16px;
+    background: white;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #333;
+  }
+  #skin-name {
+    font-family: 'Bungee', sans-serif;
+    color: white;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-align: center;
+    margin: 2px 0 6px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    min-height: 18px;
+  }
+  #right-hud {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  #bird-count {
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: white;
+    background: #FF3E5C;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 3px solid white;
+    box-shadow: 0 4px 0 #b21f3a, 0 6px 12px rgba(0,0,0,0.3);
+    white-space: nowrap;
+  }
+  #mute-btn {
+    pointer-events: auto;
+    background: rgba(0,0,0,0.45);
+    border: 2px solid white;
+    color: white;
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+  }
+
+  /* ======= LEVEL BANNER ======= */
+  #level-banner {
+    position: fixed;
+    top: 38%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.7);
+    z-index: 8;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+  }
+  #level-banner.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .banner-num {
+    font-family: 'Bungee', sans-serif;
+    font-size: 22px;
+    letter-spacing: 4px;
+    color: white;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+  }
+  .banner-name {
+    font-family: 'Bungee', sans-serif;
+    font-size: clamp(48px, 14vw, 72px);
+    color: #FFD700;
+    line-height: 1;
+    text-shadow:
+      4px 4px 0 #1a4d8c,
+      -2px -2px 0 #1a4d8c, 2px -2px 0 #1a4d8c, -2px 2px 0 #1a4d8c,
+      0 10px 20px rgba(0,0,0,0.5);
+  }
+  .banner-flag {
+    font-size: 56px;
+    margin-top: 8px;
+  }
+
+  /* ======= OVERLAYS ======= */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 20px 16px 32px;
+    z-index: 10;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background:
+      radial-gradient(ellipse at top, rgba(255, 217, 181, 0.5), transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(91, 180, 232, 0.78), rgba(91, 180, 232, 0.45));
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  /* Game over centraliza vertical (tem pouco conteúdo) */
+  #game-over { justify-content: center; gap: 22px; padding: 32px; }
+  /* Mantém o gap maior no desktop */
+  @media (min-height: 700px) {
+    .overlay { gap: 18px; padding: 28px 20px; }
+  }
+  .overlay.hidden { display: none; }
+  .overlay h1 {
+    font-family: 'Bungee', 'Fredoka', sans-serif;
+    font-size: clamp(48px, 13vw, 100px);
+    color: #FF8C42;
+    text-align: center;
+    line-height: 0.9;
+    letter-spacing: -1px;
+    transform: rotate(-3deg);
+    margin: 4px 0;
+    text-shadow:
+      4px 4px 0 #1a4d8c,
+      -1px -1px 0 #1a4d8c, 1px -1px 0 #1a4d8c, -1px 1px 0 #1a4d8c,
+      8px 10px 0 rgba(0,0,0,0.18);
+  }
+  .game-title-beto {
+    color: #FFD700;
+    display: inline-block;
+    font-size: 0.7em;
+    transform: rotate(4deg);
+    text-shadow:
+      4px 4px 0 #1a4d8c,
+      -1px -1px 0 #1a4d8c, 1px -1px 0 #1a4d8c, -1px 1px 0 #1a4d8c,
+      6px 8px 0 rgba(0,0,0,0.2);
+  }
+  .overlay .subtitle {
+    font-size: clamp(13px, 3.5vw, 20px);
+    font-weight: 700;
+    color: #1a4d8c;
+    text-align: center;
+    max-width: 320px;
+    line-height: 1.35;
+  }
+  .play-btn {
+    font-family: 'Bungee', 'Fredoka', sans-serif;
+    font-size: clamp(22px, 6vw, 30px);
+    color: white;
+    background: #FF3E5C;
+    border: 4px solid white;
+    padding: 16px 52px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #b21f3a, 0 10px 24px rgba(0,0,0,0.25);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+    letter-spacing: 1.5px;
+    margin-top: 4px;
+  }
+  .play-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #b21f3a, 0 4px 10px rgba(0,0,0,0.2);
+  }
+  .continue-ad-btn {
+    font-family: 'Bungee', 'Fredoka', sans-serif;
+    font-size: clamp(18px, 5vw, 24px);
+    color: white;
+    background: linear-gradient(135deg, #4CAF50, #2E7D32);
+    border: 4px solid white;
+    padding: 14px 38px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #1B5E20, 0 10px 24px rgba(0,0,0,0.25);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+    letter-spacing: 1px;
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .continue-ad-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #1B5E20, 0 4px 10px rgba(0,0,0,0.2);
+  }
+  .continue-ad-btn.hidden { display: none; }
+  .continue-ad-btn .ad-tag {
+    font-size: 0.5em;
+    background: rgba(0,0,0,0.25);
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 1.5px;
+    font-weight: 400;
+  }
+  .controls-hint {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin-top: 4px;
+    max-width: 360px;
+    width: 100%;
+  }
+  .controls-hint div {
+    background: rgba(255,255,255,0.85);
+    padding: 5px 4px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1a4d8c;
+    border: 2px solid white;
+    text-align: center;
+  }
+  .stats {
+    display: flex;
+    gap: 18px;
+    background: white;
+    padding: 14px 22px;
+    border-radius: 20px;
+    border: 4px solid #1a4d8c;
+    box-shadow: 0 6px 0 #0f3361;
+  }
+  .stat-block { text-align: center; min-width: 70px; }
+  .stat-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .stat-value {
+    font-family: 'Bungee', sans-serif;
+    font-size: 30px;
+    color: #FF8C42;
+    line-height: 1;
+    margin-top: 4px;
+  }
+
+  /* ======= FLASH FX (sutil — só uma piscadinha no topo) ======= */
+  #flash {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 30vh;
+    background: radial-gradient(ellipse at top, rgba(255,255,255,0.45), transparent 70%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s ease-out;
+    z-index: 4;
+  }
+  #flash.show { opacity: 1; transition: opacity 0.04s; }
+
+  /* Flash do TURBO (caixa de leite) — dourado/laranja */
+  #save-flash {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle, rgba(255, 180, 60, 0.4), transparent 60%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+    z-index: 4;
+  }
+  #save-flash.show { opacity: 1; transition: opacity 0.05s; }
+
+  /* Toast de TURBO */
+  #save-toast {
+    position: fixed;
+    top: 22%;
+    left: 50%;
+    transform: translate(-50%, -20px);
+    background: linear-gradient(135deg, #FF6B35, #F44336);
+    color: white;
+    padding: 14px 24px;
+    border-radius: 22px;
+    border: 3px solid #FFD700;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35), 0 0 24px rgba(255, 215, 0, 0.6);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 8;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  }
+  #save-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  #save-toast .save-icon { font-size: 32px; }
+  #save-toast .save-text {
+    font-family: 'Bungee', sans-serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  #save-toast .save-sub {
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    opacity: 0.9;
+    margin-top: 3px;
+    font-weight: 700;
+  }
+
+  /* Barra de tempo do TURBO no HUD */
+  #power-bar {
+    position: fixed;
+    top: 95px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0,0,0,0.55);
+    padding: 7px 16px 7px 12px;
+    border-radius: 999px;
+    border: 2.5px solid #FFD700;
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.6);
+    z-index: 6;
+    pointer-events: none;
+  }
+  #power-bar.active {
+    display: flex;
+    animation: powerPulse 0.7s ease-in-out infinite;
+  }
+  @keyframes powerPulse {
+    0%, 100% { box-shadow: 0 0 16px rgba(255, 215, 0, 0.6); }
+    50%      { box-shadow: 0 0 28px rgba(255, 180, 0, 0.9); }
+  }
+  #power-bar .power-icon {
+    font-size: 22px;
+    line-height: 1;
+  }
+  #power-bar .power-fill-bg {
+    width: 110px;
+    height: 9px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  #power-bar .power-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #FFD700, #FF6B35);
+    border-radius: 999px;
+    width: 100%;
+    transition: width 0.1s linear;
+  }
+  #power-bar .power-label {
+    font-family: 'Bungee', sans-serif;
+    font-size: 13px;
+    color: white;
+    letter-spacing: 1.5px;
+  }
+
+  /* GARRA — barra (estilo igual ao turbo, cor diferente) + toast + cursor */
+  #claw-bar {
+    position: fixed;
+    top: 130px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(20,0,0,0.65);
+    padding: 7px 16px 7px 12px;
+    border-radius: 999px;
+    border: 2.5px solid #FF3030;
+    box-shadow: 0 0 16px rgba(255, 48, 48, 0.7);
+    z-index: 6;
+    pointer-events: none;
+  }
+  #claw-bar.active {
+    display: flex;
+    animation: clawPulse 0.6s ease-in-out infinite;
+  }
+  @keyframes clawPulse {
+    0%, 100% { box-shadow: 0 0 16px rgba(255, 48, 48, 0.7); }
+    50%      { box-shadow: 0 0 32px rgba(255, 100, 0, 1.0); }
+  }
+  #claw-bar .claw-icon { font-size: 22px; line-height: 1; }
+  .claw-fill {
+    background: linear-gradient(90deg, #FF3030, #FFAA00) !important;
+  }
+  #claw-toast {
+    position: fixed;
+    top: 200px;
+    left: 50%;
+    transform: translate(-50%, -120%);
+    background: rgba(180, 0, 0, 0.95);
+    color: white;
+    padding: 12px 22px;
+    border-radius: 16px;
+    border: 4px solid #FFAA00;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    font-family: 'Bungee', sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    opacity: 0;
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+    z-index: 50;
+    pointer-events: none;
+  }
+  #claw-toast.show {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  #claw-toast .claw-icon { font-size: 30px; }
+  /* Trail de garra estilo Fruit Ninja */
+  #slash-trail {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+    z-index: 60;
+    display: none;
+  }
+  body.claw-mode #slash-trail { display: block; }
+  body.slash-mode #slash-trail { display: block; }
+  body.claw-mode { cursor: none; }
+  body.slash-mode { cursor: none; }
+
+  /* LANGUAGE PICKER */
+  #lang-picker {
+    background: linear-gradient(135deg, #1a4d8c 0%, #2a6cb0 100%);
+    z-index: 100;
+  }
+  .lang-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: 36px;
+    color: white;
+    text-align: center;
+    letter-spacing: 1px;
+    text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    margin-bottom: 8px;
+  }
+  .lang-sub {
+    font-size: 14px;
+    color: rgba(255,255,255,0.85);
+    text-align: center;
+    margin-bottom: 32px;
+    letter-spacing: 0.5px;
+  }
+  .lang-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 80%;
+    max-width: 320px;
+  }
+  .lang-btn {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 24px;
+    background: white;
+    border: 4px solid #FFD700;
+    border-radius: 16px;
+    font-family: 'Bungee', sans-serif;
+    font-size: 20px;
+    color: #1a4d8c;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    box-shadow: 0 6px 0 rgba(0,0,0,0.25);
+  }
+  .lang-btn:active {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }
+  .lang-flag {
+    font-size: 36px;
+    line-height: 1;
+  }
+  .lang-name {
+    letter-spacing: 1.5px;
+  }
+  /* Botão de troca de idioma no menu */
+  #lang-toggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 3px solid white;
+    background: rgba(0,0,0,0.4);
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+
+  /* LOJA DE POWER-UPS (no menu) */
+  #powerup-shop {
+    margin: 4px 0 2px;
+    width: 100%;
+  }
+  .pup-section-label {
+    font-family: 'Bungee', sans-serif;
+    font-size: 10px;
+    color: white;
+    letter-spacing: 1.5px;
+    text-align: center;
+    margin-bottom: 4px;
+    opacity: 0.85;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+  .pup-row {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .pup-card {
+    background: rgba(255,255,255,0.92);
+    border: 3px solid rgba(255,255,255,0.3);
+    border-radius: 12px;
+    padding: 5px 6px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 62px;
+    cursor: pointer;
+    transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .pup-card:active { transform: scale(0.94); }
+  .pup-card.selected {
+    border-color: #FFD700;
+    box-shadow: 0 0 0 4px rgba(255,215,0,0.35), 0 4px 0 rgba(0,0,0,0.25);
+    transform: scale(1.05);
+  }
+  .pup-card.locked {
+    background: rgba(160,160,160,0.85);
+  }
+  .pup-icon {
+    font-size: 28px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .pup-card.locked .pup-icon {
+    filter: grayscale(0.7) brightness(0.7);
+  }
+  .pup-name {
+    font-family: 'Bungee', sans-serif;
+    font-size: 11px;
+    color: #1a4d8c;
+    letter-spacing: 1px;
+  }
+  .pup-card.locked .pup-name { color: #555; }
+  .pup-status {
+    font-family: 'Bungee', sans-serif;
+    font-size: 10px;
+    color: #888;
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+  }
+  .pup-card.selected .pup-status { color: #1a4d8c; font-weight: 900; }
+
+  /* HUD DE POWER-UPS (em jogo, canto inferior esquerdo) */
+  #pup-hud {
+    position: fixed;
+    bottom: 20px;
+    left: 16px;
+    display: flex;
+    gap: 8px;
+    z-index: 6;
+  }
+  #pup-hud.hidden { display: none; }
+  .pup-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.6);
+    border: 3px solid #FFD700;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: transform 0.1s ease;
+    position: relative;
+  }
+  .pup-btn:disabled {
+    opacity: 0.4;
+    border-color: #666;
+    cursor: not-allowed;
+  }
+  .pup-btn:not(:disabled):active { transform: scale(0.92); }
+  .pup-btn-icon { font-size: 22px; line-height: 1; }
+  .pup-btn-count {
+    position: absolute;
+    bottom: -4px; right: -4px;
+    background: #FF3030;
+    color: white;
+    font-family: 'Bungee', sans-serif;
+    font-size: 11px;
+    border-radius: 999px;
+    padding: 1px 6px;
+    border: 2px solid white;
+  }
+
+  /* CRÉDITOS no rodapé do menu */
+  #credits {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.2);
+    text-align: center;
+    width: 100%;
+  }
+  .credits-studio {
+    font-family: 'Bungee', sans-serif;
+    font-size: 14px;
+    color: #FFD700;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    margin-bottom: 6px;
+  }
+  .credits-title {
+    font-size: 10px;
+    color: rgba(255,255,255,0.65);
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+  .credits-name {
+    font-family: 'Bungee', sans-serif;
+    font-size: 12px;
+    color: white;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    margin-bottom: 2px;
+  }
+  .credits-email {
+    display: inline-block;
+    font-size: 10px;
+    color: #FFD700;
+    text-decoration: none;
+    letter-spacing: 0.3px;
+    word-break: break-all;
+  }
+  .credits-email:hover { text-decoration: underline; }
+
+  /* Botões do game over lado a lado */
+  .go-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .play-btn.secondary {
+    background: rgba(255,255,255,0.15);
+    border: 3px solid white;
+    color: white;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+    font-size: 18px;
+    padding: 12px 22px;
+  }
+  .play-btn.secondary:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+
+  /* AD LOADING OVERLAY — feedback visível enquanto o SDK tenta carregar */
+  #ad-loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 10, 30, 0.94);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  #ad-loading-overlay.hidden { display: none; }
+  .ad-load-box {
+    text-align: center;
+    padding: 30px 40px;
+    background: rgba(255,255,255,0.06);
+    border: 3px solid #FFD700;
+    border-radius: 20px;
+    max-width: 320px;
+  }
+  .ad-load-spinner {
+    width: 60px; height: 60px;
+    border: 6px solid rgba(255,215,0,0.25);
+    border-top-color: #FFD700;
+    border-radius: 50%;
+    margin: 0 auto 18px;
+    animation: ad-spin 0.9s linear infinite;
+  }
+  @keyframes ad-spin { to { transform: rotate(360deg); } }
+  .ad-load-msg {
+    font-family: 'Bungee', sans-serif;
+    font-size: 18px;
+    color: white;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .ad-load-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+  }
+  .ad-load-countdown {
+    margin-top: 14px;
+    font-family: 'Bungee', sans-serif;
+    font-size: 32px;
+    color: #FFD700;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+</style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <canvas id="slash-trail"></canvas>
+
+  <!-- LANGUAGE PICKER — primeira tela quando ainda não escolheu idioma -->
+  <div id="lang-picker" class="overlay hidden">
+    <div class="lang-title">Choose your language</div>
+    <div class="lang-sub">Escolha o idioma · Elige tu idioma</div>
+    <div class="lang-buttons">
+      <button class="lang-btn" data-lang="pt">
+        <span class="lang-flag">🇧🇷</span>
+        <span class="lang-name">Português</span>
+      </button>
+      <button class="lang-btn" data-lang="en">
+        <span class="lang-flag">🇺🇸</span>
+        <span class="lang-name">English</span>
+      </button>
+      <button class="lang-btn" data-lang="es">
+        <span class="lang-flag">🇪🇸</span>
+        <span class="lang-name">Español</span>
+      </button>
+    </div>
+  </div>
+  <div id="flash"></div>
+  <div id="save-flash"></div>
+  <div id="save-toast">
+    <span class="save-icon">⚡</span>
+    <div>
+      <div class="save-text">TURBO!</div>
+      <div class="save-sub">destruindo obstáculos</div>
+    </div>
+  </div>
+  <div id="power-bar">
+    <span class="power-icon">⚡</span>
+    <div class="power-fill-bg"><div class="power-fill" id="power-fill"></div></div>
+    <span class="power-label">TURBO</span>
+  </div>
+
+  <!-- Modo GARRA: barra + toast -->
+  <div id="claw-bar">
+    <span class="claw-icon">🐾</span>
+    <div class="power-fill-bg"><div class="power-fill claw-fill" id="claw-fill"></div></div>
+    <span class="power-label">GARRA</span>
+  </div>
+  <div id="claw-toast">
+    <span class="claw-icon">🐾</span>
+    <div>
+      <div class="save-text">MODO GARRA!</div>
+      <div class="save-sub">clica nas balas · atropela os guardas</div>
+    </div>
+  </div>
+
+  <!-- POWER-UP HUD (botões em jogo) -->
+  <div id="pup-hud" class="hidden">
+    <button class="pup-btn" data-pup="cape" disabled>
+      <span class="pup-btn-icon">🦇</span>
+      <span class="pup-btn-count" id="pup-hud-cape">0</span>
+    </button>
+    <button class="pup-btn" data-pup="ribbon" disabled>
+      <span class="pup-btn-icon">🎀</span>
+      <span class="pup-btn-count" id="pup-hud-ribbon">0</span>
+    </button>
+    <button class="pup-btn" data-pup="laser" disabled>
+      <span class="pup-btn-icon">👁️</span>
+      <span class="pup-btn-count" id="pup-hud-laser">0</span>
+    </button>
+  </div>
+
+  <!-- TZ STUDIOS SPLASH -->
+  <div id="wolf-splash">
+    <svg class="wolf-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <!-- Cat ears (orange like Beto) -->
+      <polygon points="22,30 36,52 30,52" fill="#FF8C42"/>
+      <polygon points="78,30 64,52 70,52" fill="#FF8C42"/>
+      <!-- Inner ears -->
+      <polygon points="26,36 33,50 30,50" fill="#FFB088"/>
+      <polygon points="74,36 67,50 70,50" fill="#FFB088"/>
+      <!-- Head -->
+      <ellipse cx="50" cy="58" rx="26" ry="22" fill="#FF8C42"/>
+      <!-- Belly/face white area -->
+      <ellipse cx="50" cy="68" rx="14" ry="10" fill="#FFE4B5"/>
+      <!-- Eyes (round green like cat) -->
+      <circle cx="40" cy="55" r="4.5" fill="white"/>
+      <circle cx="60" cy="55" r="4.5" fill="white"/>
+      <circle cx="40" cy="55" r="2.5" fill="#1a1a1a"/>
+      <circle cx="60" cy="55" r="2.5" fill="#1a1a1a"/>
+      <!-- Nose -->
+      <polygon points="46,66 54,66 50,71" fill="#1a1a1a"/>
+      <!-- Whiskers -->
+      <line x1="30" y1="68" x2="20" y2="66" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="30" y1="71" x2="20" y2="73" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="70" y1="68" x2="80" y2="66" stroke="#1a1a1a" stroke-width="1"/>
+      <line x1="70" y1="71" x2="80" y2="73" stroke="#1a1a1a" stroke-width="1"/>
+      <!-- Smile -->
+      <path d="M 44 72 Q 50 76 56 72" fill="none" stroke="#1a1a1a" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <div class="splash-title">TZ STUDIOS</div>
+    <div class="splash-sub">apresenta</div>
+    <div class="splash-bar"></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="score-block">
+      <div id="score">0</div>
+      <div id="level-tag">🐪 EGITO</div>
+      <div id="hearts-row"></div>
+    </div>
+    <div id="right-hud">
+      <div id="bird-count">🐦 0</div>
+      <button id="mute-btn" aria-label="Som">🔊</button>
+    </div>
+  </div>
+
+  <!-- AUDIO POR TEMA — coloque seus MP3 em ./musics/ pra eles tocarem -->
+  <audio id="audio-egito"   loop preload="none" src="musics/egito.mp3"></audio>
+  <audio id="audio-china"   loop preload="none" src="musics/china.mp3"></audio>
+  <audio id="audio-brasil"  loop preload="none" src="musics/brasil.mp3"></audio>
+  <audio id="audio-arabia"  loop preload="none" src="musics/arabia.mp3"></audio>
+  <audio id="audio-franca"  loop preload="none" src="musics/franca.mp3"></audio>
+  <audio id="audio-londres" loop preload="none" src="musics/londres.mp3"></audio>
+  <audio id="audio-japao"   loop preload="none" src="musics/japao.mp3"></audio>
+
+  <!-- LEVEL BANNER -->
+  <div id="level-banner">
+    <div class="banner-num">LEVEL 1</div>
+    <div class="banner-name">DIA</div>
+    <div class="banner-flag"></div>
+  </div>
+
+  <!-- MAIN MENU -->
+  <div id="start-screen" class="overlay hidden">
+    <button id="lang-toggle" title="Idioma">🇧🇷</button>
+    <h1><span class="game-title-beto">Beto</span><br>Cat Escapes</h1>
+    <p class="subtitle">Foge do cachorro e pega o 🥛 pra virar TURBO!</p>
+
+    <!-- Seletor de skin -->
+    <div id="skin-selector"></div>
+    <div id="skin-name">BETO</div>
+
+    <!-- Loja de power-ups - escolha 1 pra essa partida -->
+    <div id="powerup-shop">
+      <div class="pup-section-label">PODER PRA ESSA PARTIDA</div>
+      <div class="pup-row">
+        <div class="pup-card" data-pup="none">
+          <div class="pup-icon">🚫</div>
+          <div class="pup-name">NENHUM</div>
+          <div class="pup-status">grátis</div>
+        </div>
+        <div class="pup-card" data-pup="cape">
+          <div class="pup-icon">🦇</div>
+          <div class="pup-name">CAPA</div>
+          <div class="pup-status" id="pup-status-cape">🔒</div>
+        </div>
+        <div class="pup-card" data-pup="ribbon">
+          <div class="pup-icon">🎀</div>
+          <div class="pup-name">LAÇO</div>
+          <div class="pup-status" id="pup-status-ribbon">🔒</div>
+        </div>
+        <div class="pup-card" data-pup="laser">
+          <div class="pup-icon">👁️</div>
+          <div class="pup-name">LASER</div>
+          <div class="pup-status" id="pup-status-laser">🔒</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="worlds-row"></div>
+    <button class="play-btn" id="start-btn">JOGAR</button>
+    <div class="controls-hint">
+      <div>❤️ 7 vidas</div>
+      <div>🥛 turbo</div>
+      <div>👆 deslize</div>
+      <div>🐦 passarinhos</div>
+    </div>
+    <div id="credits">
+      <div class="credits-studio">TZ STUDIOS</div>
+      <div class="credits-title">Desenvolvido por</div>
+      <div class="credits-name">José Lucas Domingues</div>
+      <a class="credits-email" href="mailto:lucas.domingues16@gmail.com">lucas.domingues16@gmail.com</a>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="game-over" class="overlay hidden">
+    <h1>Te peguei!</h1>
+    <div class="stats">
+      <div class="stat-block">
+        <div class="stat-label">Pontos</div>
+        <div class="stat-value" id="final-score">0</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">🐦 Aves</div>
+        <div class="stat-value" id="final-birds">0</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">Level</div>
+        <div class="stat-value" id="final-level">1</div>
+      </div>
+    </div>
+    <button class="continue-ad-btn hidden" id="continue-ad-btn">
+      ▶️ CONTINUAR <span class="ad-tag">ver anúncio</span>
+    </button>
+    <div class="go-buttons">
+      <button class="play-btn secondary" id="menu-btn">← MENU</button>
+      <button class="play-btn" id="restart-btn">DE NOVO!</button>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ============================================================
+  //   🟦 GOOGLE ADSENSE FOR GAMES — AD MANAGER
+  // ============================================================
+  //
+  //   ⚠️  COLE SEU PUBLISHER ID AQUI (e na tag <script> no <head>!)
+  //
+  // ============================================================
+  const GOOGLE_AD_CLIENT = 'ca-pub-XXXXXXXXXXXXXXXX';
+
+  // Mostrar intersticial a cada N mortes. Com 7 vidas, morte é raro,
+  // então deixamos a cada 2 (não a cada 3) — vidas já são o "buffer"
+  const INTERSTITIAL_FREQUENCY = 2;
+
+  let gameOverCount = 0;
+  let adsReady = false;
+
+  // Configuração inicial do SDK — chamada uma vez
+  function initAds() {
+    try {
+      adConfig({
+        preloadAdBreaks: 'on',
+        sound: 'on',          // o jogo já roda com som
+        onReady: () => {
+          adsReady = true;
+          console.log('[Ads] H5 Games Ads SDK pronto');
+        },
+      });
+    } catch (e) {
+      console.warn('[Ads] adConfig falhou (provavelmente AdSense bloqueado):', e);
+    }
+  }
+
+  // Intersticial entre partidas — chamado pelo restart-btn (via restartGameWithAd).
+  // Para evitar duplicar lógica, a chamada efetiva está em restartGameWithAd.
+
+  // Rewarded — SEMPRE mostra overlay com countdown, mesmo se ad não rolar.
+  // Se rolar o ad de verdade, o SDK assume; senão, fica 4s no overlay e libera continue.
+  function tryRewardedAndContinue() {
+    if (continueUsedThisRun) return;
+    continueUsedThisRun = true;
+    sessionAdShown = true;
+    document.getElementById('continue-ad-btn').classList.add('hidden');
+
+    // Mostra overlay imediatamente — feedback visual mesmo se ad não aparecer
+    showAdLoadingOverlay(t('loading_ad') || '⏳ carregando anúncio...');
+
+    let granted = false;
+    const finish = () => {
+      if (granted) return;
+      granted = true;
+      hideAdLoadingOverlay();
+      grantContinue();
+    };
+
+    try {
+      adBreak({
+        type: 'reward',
+        name: 'continue_after_death',
+        beforeReward: (showAdFn) => {
+          // Anúncio rolou — esconde nosso overlay, deixa o ad real aparecer
+          hideAdLoadingOverlay();
+          try { showAdFn(); } catch (e) { finish(); }
+        },
+        adDismissed: finish,
+        adViewed:    finish,
+        adBreakDone: finish,
+        beforeAd: () => { stopMusic(); if (audioCtx) audioCtx.suspend().catch(() => {}); },
+        afterAd:  () => { if (audioCtx) audioCtx.resume().catch(() => {}); },
+      });
+      setTimeout(finish, 4000);
+    } catch (e) {
+      console.warn('[Ads] rewarded falhou:', e);
+      finish();
+    }
+  }
+
+  // Overlay de "carregando ad" — sempre visível pra dar feedback
+  let adOverlayCountdownTimer = null;
+  function showAdLoadingOverlay(msg) {
+    let ov = document.getElementById('ad-loading-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'ad-loading-overlay';
+      ov.innerHTML = `
+        <div class="ad-load-box">
+          <div class="ad-load-spinner"></div>
+          <div class="ad-load-msg">⏳ carregando anúncio...</div>
+          <div class="ad-load-sub">aguarde alguns segundos</div>
+          <div class="ad-load-countdown" id="ad-countdown">4</div>
+        </div>`;
+      document.body.appendChild(ov);
+    } else {
+      const m = ov.querySelector('.ad-load-msg');
+      if (m) m.textContent = msg || '⏳ carregando anúncio...';
+    }
+    ov.classList.remove('hidden');
+    // Countdown visual: 4 → 3 → 2 → 1
+    let cnt = 4;
+    const cdEl = document.getElementById('ad-countdown');
+    if (cdEl) cdEl.textContent = cnt;
+    if (adOverlayCountdownTimer) clearInterval(adOverlayCountdownTimer);
+    adOverlayCountdownTimer = setInterval(() => {
+      cnt--;
+      if (cdEl) cdEl.textContent = cnt > 0 ? cnt : '✓';
+      if (cnt <= 0 && adOverlayCountdownTimer) {
+        clearInterval(adOverlayCountdownTimer);
+        adOverlayCountdownTimer = null;
+      }
+    }, 1000);
+  }
+  function hideAdLoadingOverlay() {
+    const ov = document.getElementById('ad-loading-overlay');
+    if (ov) ov.classList.add('hidden');
+    if (adOverlayCountdownTimer) {
+      clearInterval(adOverlayCountdownTimer);
+      adOverlayCountdownTimer = null;
+    }
+  }
+
+  // ============================================================
+  // AUDIO SYSTEM
+  // ============================================================
+  let audioCtx = null;
+  let muted = false;
+  let musicPlaying = false;
+  let musicNextStart = 0;
+  let musicTimer = null;
+  let masterGain = null;
+
+  function ensureAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(audioCtx.destination);
+      } catch (e) { return null; }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playNote(freq, when, dur, type = 'sine', vol = 0.1, dest = null) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, when);
+    gain.gain.linearRampToValueAtTime(vol, when + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+    osc.connect(gain).connect(dest || masterGain);
+    osc.start(when);
+    osc.stop(when + dur + 0.05);
+  }
+
+  function sfxJump() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(300, t);
+    osc.frequency.exponentialRampToValueAtTime(700, t + 0.12);
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    osc.connect(gain).connect(masterGain);
+    osc.start(t); osc.stop(t + 0.16);
+  }
+  function sfxSlide() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noise = audioCtx.createBufferSource();
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i/data.length);
+    noise.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 600;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.15;
+    noise.connect(filter).connect(gain).connect(masterGain);
+    noise.start();
+  }
+  function sfxLane() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    playNote(500, t, 0.07, 'triangle', 0.12);
+    playNote(700, t + 0.05, 0.05, 'triangle', 0.1);
+  }
+  function sfxBird() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    playNote(880, t, 0.08, 'sine', 0.18);
+    playNote(1320, t + 0.06, 0.1, 'sine', 0.16);
+    playNote(1760, t + 0.13, 0.12, 'sine', 0.14);
+  }
+  function sfxBark() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    function woof(start) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, start);
+      osc.frequency.exponentialRampToValueAtTime(90, start + 0.13);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.32, start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 1500;
+      osc.connect(filter).connect(gain).connect(masterGain);
+      osc.start(start); osc.stop(start + 0.2);
+    }
+    woof(t);
+    woof(t + 0.22);
+  }
+  function sfxHit() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(40, t + 0.4);
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain).connect(masterGain);
+    osc.start(t); osc.stop(t + 0.5);
+  }
+  function sfxLevelUp() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) => playNote(f, t + i * 0.08, 0.2, 'triangle', 0.16));
+  }
+
+  // Melodias sintetizadas por tema (fallback se o MP3 não existir)
+  // Indexadas pelo id do tema pra casar com THEMES
+  // ═══════════════════════════════════════════════════════════
+  //   🎼 ENGINE SINFÔNICO MULTI-VOZ
+  //   Cada tema = 32 batidas com lead + harmonia + baixo + bateria
+  //   Cada voz é um array do tamanho da batida onde 0 = silêncio
+  // ═══════════════════════════════════════════════════════════
+  const MELODIES = {
+    // 🐪 EGITO — "Snake Charmer Symphony", escala árabe lenta + tabla
+    egito: {
+      beat: 0.16, length: 32,
+      lead: [
+        330,0,0,294, 262,0,294,0, 330,0,392,0, 440,0,415,0,
+        392,0,330,294, 262,0,0,0, 294,330,392,0, 440,415,392,330
+      ],
+      harmony: [
+        523,0,0,0, 0,0,494,0, 523,0,587,0, 659,0,623,0,
+        587,0,494,0, 415,0,0,0, 466,494,523,0, 587,623,587,523
+      ],
+      bass: [
+        131,0,0,0, 131,0,0,0, 147,0,0,0, 165,0,0,0,
+        131,0,0,0, 131,0,0,0, 147,0,165,0, 131,0,0,0
+      ],
+      kicks: [0,4,8,12,16,20,24,28],
+      snares: [6,14,22,30],
+      hats:  [2,6,10,14,18,22,26,30],
+      leadType: 'square', harmonyType: 'triangle', bassType: 'sawtooth',
+    },
+
+    // 🐉 CHINA — "Dragon's Journey", pentatônica rápida + woodblock
+    china: {
+      beat: 0.12, length: 32,
+      lead: [
+        523,587,659,784, 880,784,659,587, 523,659,784,880, 1047,880,784,659,
+        587,523,587,659, 784,659,587,523, 392,523,659,784, 880,784,659,587
+      ],
+      harmony: [
+        262,294,330,392, 440,392,330,294, 262,330,392,440, 523,440,392,330,
+        294,262,294,330, 392,330,294,262, 196,262,330,392, 440,392,330,294
+      ],
+      bass: [
+        262,0,196,0, 262,0,196,0, 220,0,165,0, 262,0,196,0,
+        262,0,196,0, 262,0,196,0, 220,0,165,0, 262,0,196,0
+      ],
+      kicks: [0,8,16,24],
+      snares: [4,12,20,28],
+      hats:  [0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30],
+      leadType: 'triangle', harmonyType: 'sine', bassType: 'sawtooth',
+    },
+
+    // 🇧🇷 BRASIL — "Carnaval Funk", samba sincopado + surdo
+    brasil: {
+      beat: 0.13, length: 32,
+      lead: [
+        392,0,466,392, 587,466,0,392, 349,466,0,392, 466,0,349,294,
+        392,0,466,392, 587,466,0,587, 698,466,0,392, 466,0,349,392
+      ],
+      harmony: [
+        523,0,0,0, 587,0,0,523, 466,0,0,523, 0,0,466,392,
+        523,0,0,0, 587,0,0,659, 587,0,0,523, 0,0,466,523
+      ],
+      bass: [
+        175,0,175,0, 220,0,196,0, 175,0,175,0, 196,0,220,196,
+        175,0,175,0, 220,0,196,0, 175,0,175,0, 196,0,220,196
+      ],
+      kicks: [0,4,8,12,16,20,24,28],
+      snares: [2,6,10,14,18,22,26,30],
+      hats:  [1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31],
+      leadType: 'sawtooth', harmonyType: 'triangle', bassType: 'sawtooth',
+    },
+
+    // 🕌 ARÁBIA — "Desert Mystery", harmônica menor + darbouka
+    arabia: {
+      beat: 0.17, length: 32,
+      lead: [
+        220,0,261,0, 311,0,349,0, 392,415,466,415, 392,349,311,261,
+        220,261,311,349, 392,0,349,311, 261,311,349,415, 466,415,349,311
+      ],
+      harmony: [
+        330,0,392,0, 466,0,523,0, 587,623,698,623, 587,523,466,392,
+        330,392,466,523, 587,0,523,466, 392,466,523,623, 698,623,523,466
+      ],
+      bass: [
+        110,0,0,0, 110,0,0,0, 130,0,0,0, 130,0,0,0,
+        110,0,0,0, 110,0,0,0, 130,0,0,0, 110,0,0,0
+      ],
+      kicks: [0,4,10,16,20,26],
+      snares: [8,24],
+      hats:  [2,6,12,18,22,28],
+      leadType: 'sine', harmonyType: 'triangle', bassType: 'sawtooth',
+    },
+
+    // 🗼 FRANÇA — "Paris Café Waltz", 3/4 + acordeão feel
+    franca: {
+      beat: 0.18, length: 24,  // múltiplo de 3 pra valsa
+      lead: [
+        392,0,0, 494,0,0, 587,523,494, 440,0,0,
+        392,0,0, 494,587,659, 587,523,494, 440,392,330
+      ],
+      harmony: [
+        523,0,0, 659,0,0, 784,659,587, 523,0,0,
+        523,0,0, 659,0,784, 659,587,523, 494,523,494
+      ],
+      bass: [
+        196,0,0, 196,0,0, 220,0,0, 220,0,0,
+        196,0,0, 196,0,0, 220,0,0, 196,0,0
+      ],
+      kicks: [0,3,6,9,12,15,18,21],
+      snares: [1,4,7,10,13,16,19,22, 2,5,8,11,14,17,20,23],  // tipo "oom-pah-pah"
+      hats:  [],
+      leadType: 'triangle', harmonyType: 'triangle', bassType: 'sine',
+    },
+
+    // 🎡 LONDRES — "Foggy Bells", dirge lento e melancólico + sino
+    londres: {
+      beat: 0.24, length: 16,
+      lead: [
+        220,0,0,0, 247,0,261,0, 294,0,247,0, 220,0,0,0,
+      ],
+      harmony: [
+        330,0,0,0, 370,0,392,0, 440,0,370,0, 330,0,0,0,
+      ],
+      bass: [
+        110,0,0,0, 110,0,0,0, 98,0,0,0, 110,0,0,0,
+      ],
+      kicks: [0,8],
+      snares: [],
+      hats: [4,12],
+      leadType: 'sine', harmonyType: 'sine', bassType: 'sine',
+    },
+
+    // 🗾 JAPÃO — "Cherry Blossom Dance", Hirajoshi rápida + taiko
+    japao: {
+      beat: 0.11, length: 32,
+      lead: [
+        440,0,466,523, 622,523,466,440, 466,523,622,698, 783,698,622,523,
+        466,440,466,523, 622,523,466,440, 440,523,698,783, 698,622,523,466
+      ],
+      harmony: [
+        220,0,233,261, 311,261,233,220, 233,261,311,349, 392,349,311,261,
+        233,220,233,261, 311,261,233,220, 220,261,349,392, 349,311,261,233
+      ],
+      bass: [
+        220,0,0,0, 220,0,0,0, 233,0,0,0, 196,0,0,0,
+        220,0,0,0, 220,0,0,0, 233,0,0,0, 220,0,0,0
+      ],
+      kicks: [0,4,8,12,16,20,24,28],
+      snares: [6,14,22,30],
+      hats:  [2,6,10,14,18,22,26,30],
+      leadType: 'triangle', harmonyType: 'sine', bassType: 'sawtooth',
+    },
+  };
+  let currentMelodyId = 'brasil';
+
+  // Helper pra reproduzir drum (kick/snare/hat) com parâmetros fixos
+  function playKick(when)  { playNote(60,  when, 0.10, 'sine',     0.18); }
+  function playSnare(when) { playNote(220, when, 0.04, 'square',   0.07);
+                             playNote(900, when, 0.03, 'sawtooth', 0.04); }
+  function playHat(when)   { playNote(8000, when, 0.02, 'square',  0.025); }
+
+  function startMusic() {
+    if (!audioCtx || musicPlaying) return;
+    musicPlaying = true;
+    musicNextStart = audioCtx.currentTime + 0.05;
+    scheduleMusic();
+  }
+  function scheduleMusic() {
+    if (!musicPlaying || !audioCtx) return;
+    const m = MELODIES[currentMelodyId] || MELODIES.egito;
+    const beat = m.beat;
+    const start = musicNextStart;
+    const len = m.length;
+
+    // Lead, Harmony, Bass — tocam suas notas onde > 0
+    if (m.lead) for (let i = 0; i < len; i++) {
+      if (m.lead[i] > 0) playNote(m.lead[i], start + i * beat, beat * 0.85, m.leadType, 0.055);
+    }
+    if (m.harmony) for (let i = 0; i < len; i++) {
+      if (m.harmony[i] > 0) playNote(m.harmony[i], start + i * beat, beat * 0.85, m.harmonyType, 0.030);
+    }
+    if (m.bass) for (let i = 0; i < len; i++) {
+      if (m.bass[i] > 0) playNote(m.bass[i], start + i * beat, beat * 1.6, m.bassType, 0.045);
+    }
+    // Drums
+    if (m.kicks)  m.kicks.forEach(b  => playKick(start + b * beat));
+    if (m.snares) m.snares.forEach(b => playSnare(start + b * beat));
+    if (m.hats)   m.hats.forEach(b   => playHat(start + b * beat));
+
+    const loopDur = len * beat;
+    musicNextStart += loopDur;
+    musicTimer = setTimeout(scheduleMusic, loopDur * 1000 * 0.75);
+  }
+  function stopMusic() {
+    musicPlaying = false;
+    if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+  }
+
+  // 🎵 Música frenética do modo garra — sobrescreve melodia temporariamente
+  let preFreneticMelodyId = null;
+  const FRENETIC_MELODY = {
+    notes: [440, 523, 659, 880, 659, 880, 523, 659, 440, 523, 880, 1047],
+    bass: 110, type: 'square', beat: 0.14,  // tempo bem rápido
+  };
+  function startFreneticMusic() {
+    preFreneticMelodyId = currentMelodyId;
+    MELODIES.__frenetic__ = FRENETIC_MELODY;
+    currentMelodyId = '__frenetic__';
+    // Reinicia o scheduler pra pegar o novo beat
+    if (musicPlaying && audioCtx) {
+      stopMusic();
+      startMusic();
+    }
+  }
+  function stopFreneticMusic() {
+    if (preFreneticMelodyId) {
+      currentMelodyId = preFreneticMelodyId;
+      preFreneticMelodyId = null;
+      if (audioCtx && !musicPlaying) startMusic();
+    }
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    if (masterGain) masterGain.gain.value = muted ? 0 : 1;
+    // Mute também o audio do tema, se estiver tocando
+    if (currentThemeAudio) currentThemeAudio.volume = muted ? 0 : 0.55;
+    document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
+  }
+
+  // ============================================================
+  // THEMES (7 LEVELS)
+  // ============================================================
+  const THEMES = [
+    {
+      id: 'egito', name: 'EGITO', flag: '🐪',
+      sky: ['#E08A40', '#F5C77E', '#FFE4B5', '#FFEED0'],
+      fog: 0xFFD8A8, fogDist: [22, 50],
+      ground: 0xE8C77E, path: 0xD4A968,
+      ambient: 0.78, sun: 1.15, sunColor: 0xFFE0AA,
+      decor: 'pyramid',
+    },
+    {
+      id: 'china', name: 'CHINA', flag: '🐉',
+      sky: ['#B83A4D', '#FF7A8A', '#FFB5C0', '#FFD5DC'],
+      fog: 0xFFC5CC, fogDist: [22, 48],
+      ground: 0x6ECC6C, path: 0xC44A55,
+      ambient: 0.72, sun: 1.0, sunColor: 0xFFE0E5,
+      decor: 'pagoda',
+    },
+    {
+      id: 'brasil', name: 'BRASIL', flag: '🇧🇷',
+      sky: ['#0099CC', '#7FD9F0', '#FFEE66', '#FFD700'],
+      fog: 0xAAE0BD, fogDist: [22, 50],
+      ground: 0x4FC56C, path: 0xA0613A,
+      ambient: 0.72, sun: 1.05, sunColor: 0xFFFFE0,
+      decor: 'palm',
+    },
+    {
+      id: 'arabia', name: 'ARÁBIA', flag: '🕌',
+      sky: ['#4A2F8A', '#8B4FB8', '#E08A6B', '#FFB87A'],
+      fog: 0xC58A6F, fogDist: [20, 46],
+      ground: 0xD9A865, path: 0xB8853F,
+      ambient: 0.6, sun: 0.85, sunColor: 0xFFC890,
+      decor: 'mosque', stars: true,
+    },
+    {
+      id: 'franca', name: 'FRANÇA', flag: '🗼',
+      sky: ['#FFB5C5', '#FFD5DC', '#C8D8F0', '#E8E0F0'],
+      fog: 0xE5D5E0, fogDist: [22, 50],
+      ground: 0x9CB5A8, path: 0xC8AB85,
+      ambient: 0.78, sun: 0.92, sunColor: 0xFFE8E0,
+      decor: 'eiffel',
+    },
+    {
+      id: 'londres', name: 'LONDRES', flag: '🎡',
+      sky: ['#4A5560', '#6E7886', '#9AA0A8', '#C0C4C8'],
+      fog: 0x9FA8B0, fogDist: [14, 36],
+      ground: 0x4F5A4A, path: 0x6A6A6A,
+      ambient: 0.55, sun: 0.55, sunColor: 0xC8D0D8,
+      decor: 'bigben',
+    },
+    {
+      id: 'japao', name: 'JAPÃO', flag: '🗾',
+      sky: ['#FF9DBD', '#FFB7C5', '#FFD0DC', '#FFE8EE'],
+      fog: 0xFFCFE0, fogDist: [22, 48],
+      ground: 0x6ECC6C, path: 0xC8AB85,
+      ambient: 0.72, sun: 0.95, sunColor: 0xFFEEEE,
+      decor: 'cherry',
+    },
+  ];
+  const LEVEL_DURATION = 50; // segundos por nível (mais longo)
+
+  // Embaralha a ordem dos temas pra essa partida
+  function shuffleThemeOrder(lastShownId) {
+    const indices = THEMES.map((_, i) => i);
+    // Brasil sempre é o primeiro mundo (Beto é gato brasileiro!)
+    const brasilIdx = THEMES.findIndex(t => t.id === 'brasil');
+    // Embaralha o resto
+    const rest = indices.filter(i => i !== brasilIdx);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    return [brasilIdx, ...rest];
+  }
+
+  // ============================================================
+  // THREE.JS SETUP
+  // ============================================================
+  const scene = new THREE.Scene();
+
+  function makeSkyTexture(colors) {
+    const c = document.createElement('canvas');
+    c.width = 2; c.height = 512;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, 512);
+    if (colors.length === 4) {
+      g.addColorStop(0, colors[0]);
+      g.addColorStop(0.4, colors[1]);
+      g.addColorStop(0.8, colors[2]);
+      g.addColorStop(1, colors[3]);
+    } else {
+      colors.forEach((c, i) => g.addColorStop(i / (colors.length - 1), c));
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 2, 512);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  let activeTheme = THEMES.find(t => t.id === 'brasil') || THEMES[0];
+  scene.background = makeSkyTexture(activeTheme.sky);
+  scene.fog = new THREE.Fog(activeTheme.fog, activeTheme.fogDist[0], activeTheme.fogDist[1]);
+
+  const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 200);
+  camera.position.set(0, 7, 10);
+  camera.lookAt(0, 1, -3);
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas: document.getElementById('game-canvas'),
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+  const ambient = new THREE.AmbientLight(0xFFFFFF, activeTheme.ambient);
+  scene.add(ambient);
+  const sun = new THREE.DirectionalLight(activeTheme.sunColor, activeTheme.sun);
+  sun.position.set(6, 14, 4);
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xFFDDCC, 0.25);
+  fill.position.set(-4, 6, -2);
+  scene.add(fill);
+
+  // ============================================================
+  // CONSTANTS
+  // ============================================================
+  const LANES = [-2, 0, 2];
+  const GROUND_TILE_LEN = 25;
+  const NUM_GROUND_TILES = 4;
+  const GRAVITY = -32;
+  const JUMP_FORCE = 11;
+  const SLIDE_DURATION = 0.7;
+  const LANE_SPEED = 12;
+
+  // ============================================================
+  // CAT (rotated 180° to face away from camera - Subway Surfers style)
+  // ============================================================
+  // ============================================================
+  // 🌍 IDIOMAS — PT-BR, EN, ES
+  // ============================================================
+  const LANG_KEY = 'catEscapes:lang';
+  const TRANSLATIONS = {
+    pt: {
+      _flag: '🇧🇷',
+      subtitle: 'Foge do cachorro e pega o 🥛 pra virar TURBO!',
+      play: 'JOGAR',
+      record: '🏆 Recorde:',
+      hint_lives: '❤️ 7 vidas',
+      hint_turbo: '🥛 turbo',
+      hint_swipe: '👆 deslize',
+      hint_birds: '🐦 passarinhos',
+      gameover_title: 'Te peguei!',
+      gameover_pts: 'PONTOS',
+      gameover_birds: 'PASSARINHOS',
+      gameover_world: 'MUNDO',
+      again: 'JOGAR DE NOVO',
+      menu: '← MENU',
+      continue_ad: '▶️ CONTINUAR · ver anúncio',
+      world: 'MUNDO',
+      turbo_label: 'TURBO',
+      turbo_title: 'TURBO!',
+      turbo_desc: 'destruindo obstáculos',
+      claw_label: 'GARRA',
+      claw_title: 'MODO GARRA!',
+      claw_desc: 'risca a tela · destrói tudo',
+      loading_ad: '⏳ carregando anúncio...',
+      worlds_visited: '???',
+      themes: {
+        egito: 'EGITO', china: 'CHINA', brasil: 'BRASIL',
+        arabia: 'ARÁBIA', franca: 'FRANÇA', londres: 'LONDRES', japao: 'JAPÃO',
+      },
+      skin_colors: {
+        beto: 'LARANJA',
+        saiori: 'CINZA · OLHO AZUL',
+        mose: 'PRETO · PINTAS DOURADAS',
+        lility: 'BRANQUINHA',
+      },
+    },
+    en: {
+      _flag: '🇺🇸',
+      subtitle: 'Run from the dog and grab the 🥛 to go TURBO!',
+      play: 'PLAY',
+      record: '🏆 Best:',
+      hint_lives: '❤️ 7 lives',
+      hint_turbo: '🥛 turbo',
+      hint_swipe: '👆 swipe',
+      hint_birds: '🐦 birds',
+      gameover_title: 'Gotcha!',
+      gameover_pts: 'POINTS',
+      gameover_birds: 'BIRDS',
+      gameover_world: 'WORLD',
+      again: 'PLAY AGAIN',
+      menu: '← MENU',
+      continue_ad: '▶️ CONTINUE · watch ad',
+      world: 'WORLD',
+      turbo_label: 'TURBO',
+      turbo_title: 'TURBO!',
+      turbo_desc: 'crushing obstacles',
+      claw_label: 'CLAW',
+      claw_title: 'CLAW MODE!',
+      claw_desc: 'slash the screen · destroy everything',
+      loading_ad: '⏳ loading ad...',
+      worlds_visited: '???',
+      themes: {
+        egito: 'EGYPT', china: 'CHINA', brasil: 'BRAZIL',
+        arabia: 'ARABIA', franca: 'FRANCE', londres: 'LONDON', japao: 'JAPAN',
+      },
+      skin_colors: {
+        beto: 'ORANGE',
+        saiori: 'GRAY · BLUE EYES',
+        mose: 'BLACK · GOLD SPOTS',
+        lility: 'WHITE',
+      },
+    },
+    es: {
+      _flag: '🇪🇸',
+      subtitle: '¡Huye del perro y agarra el 🥛 para activar TURBO!',
+      play: 'JUGAR',
+      record: '🏆 Récord:',
+      hint_lives: '❤️ 7 vidas',
+      hint_turbo: '🥛 turbo',
+      hint_swipe: '👆 desliza',
+      hint_birds: '🐦 pájaros',
+      gameover_title: '¡Te atrapé!',
+      gameover_pts: 'PUNTOS',
+      gameover_birds: 'PÁJAROS',
+      gameover_world: 'MUNDO',
+      again: 'JUGAR DE NUEVO',
+      menu: '← MENÚ',
+      continue_ad: '▶️ CONTINUAR · ver anuncio',
+      world: 'MUNDO',
+      turbo_label: 'TURBO',
+      turbo_title: '¡TURBO!',
+      turbo_desc: 'destruyendo obstáculos',
+      claw_label: 'GARRA',
+      claw_title: '¡MODO GARRA!',
+      claw_desc: 'corta la pantalla · destruye todo',
+      loading_ad: '⏳ cargando anuncio...',
+      worlds_visited: '???',
+      themes: {
+        egito: 'EGIPTO', china: 'CHINA', brasil: 'BRASIL',
+        arabia: 'ARABIA', franca: 'FRANCIA', londres: 'LONDRES', japao: 'JAPÓN',
+      },
+      skin_colors: {
+        beto: 'NARANJA',
+        saiori: 'GRIS · OJOS AZULES',
+        mose: 'NEGRO · MANCHAS DORADAS',
+        lility: 'BLANQUITA',
+      },
+    },
+  };
+
+  function getLang() {
+    try {
+      const l = localStorage.getItem(LANG_KEY);
+      if (l && TRANSLATIONS[l]) return l;
+    } catch (e) {}
+    return null;  // ainda não escolheu
+  }
+  function setLang(l) {
+    try { localStorage.setItem(LANG_KEY, l); } catch (e) {}
+    currentLang = l;
+    applyLanguage();
+  }
+  let currentLang = getLang() || 'pt';
+  function t(key) {
+    return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) || key;
+  }
+  function tTheme(themeId) {
+    return TRANSLATIONS[currentLang].themes[themeId] || themeId.toUpperCase();
+  }
+  function tSkinColor(skinId) {
+    return TRANSLATIONS[currentLang].skin_colors[skinId] || '';
+  }
+
+  function applyLanguage() {
+    const T = TRANSLATIONS[currentLang];
+    // Subtitle
+    const sub = document.querySelector('#start-screen .subtitle');
+    if (sub) sub.textContent = T.subtitle;
+    // Botões e textos
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    set('start-btn', T.play);
+    set('restart-btn', T.again);
+    set('menu-btn', T.menu);
+    set('continue-ad-btn', T.continue_ad);
+    // Hints
+    const hints = document.querySelectorAll('#start-screen .controls-hint div');
+    if (hints.length >= 4) {
+      hints[0].textContent = T.hint_lives;
+      hints[1].textContent = T.hint_turbo;
+      hints[2].textContent = T.hint_swipe;
+      hints[3].textContent = T.hint_birds;
+    }
+    // Game over
+    const goTitle = document.querySelector('#game-over h1');
+    if (goTitle) goTitle.textContent = T.gameover_title;
+    const labels = document.querySelectorAll('#game-over .stat-label');
+    if (labels.length >= 3) {
+      labels[0].textContent = T.gameover_pts;
+      labels[1].textContent = T.gameover_birds;
+      labels[2].textContent = T.gameover_world;
+    }
+    // HUD power labels
+    const powerLbl = document.querySelector('#power-bar .power-label');
+    if (powerLbl) powerLbl.textContent = T.turbo_label;
+    const clawLbl = document.querySelector('#claw-bar .power-label');
+    if (clawLbl) clawLbl.textContent = T.claw_label;
+    // Toasts
+    const saveText = document.querySelector('#save-toast .save-text');
+    if (saveText) saveText.textContent = T.turbo_title;
+    const saveSub = document.querySelector('#save-toast .save-sub');
+    if (saveSub) saveSub.textContent = T.turbo_desc;
+    const clawText = document.querySelector('#claw-toast .save-text');
+    if (clawText) clawText.textContent = T.claw_title;
+    const clawSub = document.querySelector('#claw-toast .save-sub');
+    if (clawSub) clawSub.textContent = T.claw_desc;
+    // Botão de toggle (mostra a bandeira atual)
+    const toggle = document.getElementById('lang-toggle');
+    if (toggle) toggle.textContent = T._flag;
+    // Refresca elementos dinâmicos
+    if (typeof refreshWorldsRow === 'function') refreshWorldsRow();
+    if (typeof refreshSkinSelector === 'function') refreshSkinSelector();
+    // Level tag se estiver jogando
+    if (typeof activeTheme !== 'undefined' && activeTheme) {
+      const lt = document.getElementById('level-tag');
+      if (lt) lt.textContent = `${activeTheme.flag} ${tTheme(activeTheme.id)}`;
+    }
+  }
+
+  // ============================================================
+  // 🐱 SKINS DO GATO
+  // ============================================================
+  const CAT_SKINS = {
+    beto:   { name: 'BETO',   color: 'LARANJA',
+              main: 0xFF8C42, accent: 0xCC5A1F, belly: 0xFFE4B5, eye: 0x6BC36B, spots: null, free: true },
+    saiori: { name: 'SAIORI', color: 'CINZA · OLHO AZUL',
+              main: 0xB0B0B0, accent: 0x808080, belly: 0xE8E8E8, eye: 0x4A90E2, spots: null, free: false },
+    mose:   { name: 'MOSE',   color: 'PRETO · PINTAS DOURADAS',
+              main: 0x2A2A2A, accent: 0x1A1A1A, belly: 0x3A3A3A, eye: 0xFFD700, spots: 0xFFD700, free: false },
+    lility: { name: 'LILITY', color: 'BRANQUINHA',
+              main: 0xF8F8F8, accent: 0xD8D8D8, belly: 0xFFFFFF, eye: 0xFF69B4, spots: null, free: false },
+  };
+  const SKIN_KEY = 'catEscapes:selectedSkin';
+  const SKIN_UNLOCKED_KEY = 'catEscapes:unlockedSkins';
+
+  function getSelectedSkin() {
+    try {
+      const id = localStorage.getItem(SKIN_KEY);
+      return CAT_SKINS[id] ? id : 'beto';
+    } catch (e) { return 'beto'; }
+  }
+  function setSelectedSkin(id) {
+    try { localStorage.setItem(SKIN_KEY, id); } catch (e) {}
+  }
+  function getUnlockedSkins() {
+    try {
+      const v = localStorage.getItem(SKIN_UNLOCKED_KEY);
+      const arr = v ? JSON.parse(v) : [];
+      return new Set(['beto', ...arr]);  // Beto sempre desbloqueado
+    } catch (e) { return new Set(['beto']); }
+  }
+  function unlockSkin(id) {
+    try {
+      const unlocked = Array.from(getUnlockedSkins());
+      if (!unlocked.includes(id)) {
+        unlocked.push(id);
+        localStorage.setItem(SKIN_UNLOCKED_KEY, JSON.stringify(unlocked.filter(x => x !== 'beto')));
+      }
+    } catch (e) {}
+  }
+
+  // ============================================================
+  // 🎁 POWER-UPS — escolha UM pra equipar nesta partida
+  //   • 1 ad desbloqueia pra sempre
+  //   • Player escolhe 1 dos desbloqueados (ou nenhum) pra cada partida
+  //   • Em jogo, só esse aparece no HUD, com cooldown pra reuso
+  // ============================================================
+  const PUP_KEY = 'catEscapes:powerupsUnlocked';
+  const SELECTED_PUP_KEY = 'catEscapes:selectedPup';
+  const PUP_CONFIG = {
+    cape:   { icon: '🦇', name: 'CAPA',  duration: 8.0,  cooldown: 35, color: '#9C27B0' },
+    ribbon: { icon: '🎀', name: 'LAÇO',  duration: 10.0, cooldown: 30, color: '#E91E63' },
+    laser:  { icon: '👁️', name: 'LASER', duration: 7.0,  cooldown: 40, color: '#F44336' },
+  };
+
+  function getUnlockedPups() {
+    try {
+      const v = localStorage.getItem(PUP_KEY);
+      return v ? new Set(JSON.parse(v)) : new Set();
+    } catch (e) { return new Set(); }
+  }
+  function unlockPup(id) {
+    try {
+      const arr = Array.from(getUnlockedPups());
+      if (!arr.includes(id)) {
+        arr.push(id);
+        localStorage.setItem(PUP_KEY, JSON.stringify(arr));
+      }
+    } catch (e) {}
+  }
+  function getSelectedPup() {
+    try {
+      const v = localStorage.getItem(SELECTED_PUP_KEY);
+      if (v === 'none' || PUP_CONFIG[v]) return v;
+    } catch (e) {}
+    return 'none';
+  }
+  function setSelectedPup(id) {
+    try { localStorage.setItem(SELECTED_PUP_KEY, id); } catch (e) {}
+  }
+  // Cooldowns são em memória (resetam cada partida)
+  const pupCooldown = { cape: 0, ribbon: 0, laser: 0 };
+  // Estados ativos em jogo
+  const pupActive = { cape: 0, ribbon: 0, laser: 0 };
+
+  function refreshPowerupShop() {
+    const unlocked = getUnlockedPups();
+    const selected = getSelectedPup();
+    // Card "NENHUM" sempre disponível
+    const allCards = document.querySelectorAll('#powerup-shop .pup-card');
+    allCards.forEach(card => {
+      const id = card.dataset.pup;
+      card.classList.toggle('selected', id === selected);
+      if (id === 'none') {
+        card.classList.remove('locked');
+        return;
+      }
+      const isUnlocked = unlocked.has(id);
+      card.classList.toggle('locked', !isUnlocked);
+      const status = document.getElementById('pup-status-' + id);
+      if (status) {
+        status.textContent = isUnlocked ? '✓' : '🔒 +ad';
+      }
+    });
+  }
+
+  // Click no card: se locked → tenta ad pra unlock+select; se unlocked → seleciona
+  function onPupCardClick(id) {
+    if (id === 'none') {
+      setSelectedPup('none');
+      refreshPowerupShop();
+      return;
+    }
+    if (getUnlockedPups().has(id)) {
+      setSelectedPup(id);
+      refreshPowerupShop();
+    } else {
+      tryUnlockPupViaAd(id);
+    }
+  }
+
+  function tryUnlockPupViaAd(id) {
+    if (getUnlockedPups().has(id)) { setSelectedPup(id); refreshPowerupShop(); return; }
+    showAdLoadingOverlay('⏳ desbloqueando ' + PUP_CONFIG[id].name + '...');
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      hideAdLoadingOverlay();
+      if (ok) {
+        unlockPup(id);
+        setSelectedPup(id);  // já seleciona automaticamente
+        refreshPowerupShop();
+      }
+    };
+    try {
+      adBreak({
+        type: 'reward',
+        name: 'unlock_pup_' + id,
+        beforeReward: (showFn) => { hideAdLoadingOverlay(); try { showFn(); } catch (e) { finish(true); } },
+        adViewed:    () => finish(true),
+        adDismissed: () => finish(false),
+        adBreakDone: () => finish(true),
+      });
+      setTimeout(() => finish(true), 4000);
+    } catch (e) { finish(true); }
+  }
+
+  function refreshPupHud() {
+    const hud = document.getElementById('pup-hud');
+    if (!hud) return;
+    const selected = getSelectedPup();
+    if (selected === 'none') {
+      hud.classList.add('hidden');
+      return;
+    }
+    hud.classList.remove('hidden');
+    // Esconde os botões que não são o selecionado
+    hud.querySelectorAll('.pup-btn').forEach(btn => {
+      btn.style.display = (btn.dataset.pup === selected) ? 'flex' : 'none';
+    });
+    const id = selected;
+    const btn = hud.querySelector(`.pup-btn[data-pup="${id}"]`);
+    if (!btn) return;
+    const onCooldown = pupCooldown[id] > 0;
+    const isActive = pupActive[id] > 0;
+    btn.disabled = onCooldown || isActive;
+    const cntEl = document.getElementById('pup-hud-' + id);
+    if (cntEl) {
+      if (isActive) cntEl.textContent = Math.ceil(pupActive[id]) + 's';
+      else if (onCooldown) cntEl.textContent = Math.ceil(pupCooldown[id]) + 's';
+      else cntEl.textContent = '✓';
+    }
+    if (isActive) {
+      btn.style.borderColor = PUP_CONFIG[id].color;
+      btn.style.boxShadow = `0 0 18px ${PUP_CONFIG[id].color}`;
+    } else if (onCooldown) {
+      btn.style.borderColor = '#666';
+      btn.style.boxShadow = 'none';
+    } else {
+      btn.style.borderColor = '#FFD700';
+      btn.style.boxShadow = 'none';
+    }
+  }
+
+  function activatePup(id) {
+    if (id !== getSelectedPup()) return;
+    if (pupCooldown[id] > 0 || pupActive[id] > 0) return;
+    pupActive[id] = PUP_CONFIG[id].duration;
+    pupCooldown[id] = PUP_CONFIG[id].cooldown + PUP_CONFIG[id].duration;
+    refreshPupHud();
+    if (id === 'cape')   activateCape();
+    if (id === 'laser')  activateLaserMode();
+    if (id === 'ribbon') activateRibbon();
+  }
+
+  // ─── CAPA ───
+  let capeAttached = null;
+  function activateCape() {
+    // Cria capa estilo Batman: forma scalloped (pontas no bottom)
+    if (!capeAttached) {
+      const capeShape = new THREE.Shape();
+      capeShape.moveTo(-0.55, 0.05);
+      capeShape.lineTo(0.55, 0.05);
+      capeShape.lineTo(0.72, -1.15);   // bottom-right ponta
+      capeShape.lineTo(0.45, -0.92);   // scallop
+      capeShape.lineTo(0.28, -1.18);   // ponta 2
+      capeShape.lineTo(0.0,  -0.95);   // scallop centro
+      capeShape.lineTo(-0.28, -1.18);  // ponta 3
+      capeShape.lineTo(-0.45, -0.92);  // scallop
+      capeShape.lineTo(-0.72, -1.15);  // bottom-left ponta
+      capeShape.closePath();
+
+      const cape = new THREE.Mesh(
+        new THREE.ShapeGeometry(capeShape),
+        new THREE.MeshLambertMaterial({
+          color: 0x0A0A0A,
+          side: THREE.DoubleSide,
+        })
+      );
+      // ATENÇÃO: cat é container; a câmera olha o cat de +z. A capa precisa
+      // ficar do lado +z (atrás do gato pra quem joga = entre gato e câmera).
+      cape.position.set(0, 1.0, 0.35);   // pendurada no pescoço, indo pra trás
+      cape.rotation.x = 0.45;            // inclinada pra trás (flutua)
+      cape.userData.isCape = true;
+      cat.add(cape);
+      capeAttached = cape;
+    }
+    // Voo: força catY pra cima
+    state.flying = true;
+  }
+  function deactivateCape() {
+    state.flying = false;
+    if (capeAttached) {
+      cat.remove(capeAttached);
+      capeAttached = null;
+    }
+  }
+
+  // ─── LASER ─── (modo slash vermelho — você desenha)
+  let laserBeam1 = null, laserBeam2 = null;
+  function activateLaserMode() {
+    // Cria raios visuais saindo dos olhos PRA FRENTE (gato olha pra -Z)
+    const mat = new THREE.MeshBasicMaterial({ color: 0xFF0000, transparent: true, opacity: 0.7 });
+    // Cylinder com altura 1.6, rotacionado PI/2 em X → estende ao longo de Z
+    // Posição Z negativa = na frente do gato (onde os obstáculos aparecem)
+    laserBeam1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), mat);
+    laserBeam1.rotation.x = Math.PI / 2;
+    laserBeam1.position.set(-0.12, 1.02, -1.0);  // olhos + cilindro estende pra -z (frente)
+    cat.add(laserBeam1);
+    laserBeam2 = laserBeam1.clone();
+    laserBeam2.position.x = 0.12;
+    cat.add(laserBeam2);
+    document.body.classList.add('slash-mode');
+  }
+  function deactivateLaser() {
+    if (laserBeam1) { cat.remove(laserBeam1); laserBeam1 = null; }
+    if (laserBeam2) { cat.remove(laserBeam2); laserBeam2 = null; }
+    if (!state.clawActive && pupActive.ribbon <= 0) {
+      document.body.classList.remove('slash-mode');
+    }
+    slashPoints = [];
+  }
+
+  // ─── LAÇO/NOVELO ───  (modo slash rosa — você desenha)
+  let ribbonAttached = null;
+  function activateRibbon() {
+    // Adiciona laço rosa na cabeça
+    if (!ribbonAttached) {
+      const bowMat = new THREE.MeshLambertMaterial({ color: 0xFF1493 });
+      const bow = new THREE.Group();
+      const c1 = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), bowMat);
+      c1.position.x = -0.1; c1.scale.set(1, 0.6, 0.7); bow.add(c1);
+      const c2 = c1.clone(); c2.position.x = 0.1; bow.add(c2);
+      const center = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), bowMat);
+      bow.add(center);
+      bow.position.set(0, 1.45, 0.5);
+      cat.add(bow);
+      ribbonAttached = bow;
+    }
+    document.body.classList.add('slash-mode');
+  }
+  function deactivateRibbon() {
+    if (ribbonAttached) {
+      cat.remove(ribbonAttached);
+      ribbonAttached = null;
+    }
+    if (!state.clawActive && pupActive.laser <= 0) {
+      document.body.classList.remove('slash-mode');
+    }
+    slashPoints = [];
+  }
+  function createCat(skinId) {
+    skinId = skinId || getSelectedSkin();
+    const skin = CAT_SKINS[skinId] || CAT_SKINS.beto;
+    const model = new THREE.Group();
+    const main = new THREE.MeshLambertMaterial({ color: skin.main });
+    const accent = new THREE.MeshLambertMaterial({ color: skin.accent });
+    const belly = new THREE.MeshLambertMaterial({ color: skin.belly });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const pinkMat = new THREE.MeshBasicMaterial({ color: 0xFF7AA2 });
+    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+    const spotMat = skin.spots ? new THREE.MeshLambertMaterial({ color: skin.spots }) : null;
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 1.0), main);
+    body.position.y = 0.55; model.add(body);
+    const bellyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.32, 0.86), belly);
+    bellyMesh.position.set(0, 0.4, 0); model.add(bellyMesh);
+    // Stripes (orange) OR spots (mose)
+    if (skin.spots) {
+      // Pintas douradas espalhadas
+      for (let i = 0; i < 6; i++) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), spotMat);
+        const x = -0.3 + Math.random() * 0.6;
+        const z = -0.4 + Math.random() * 0.8;
+        s.position.set(x, 0.78, z);
+        model.add(s);
+      }
+    } else {
+      for (let i = 0; i < 3; i++) {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.09, 0.06), accent);
+        s.position.set(0, 0.74, -0.3 + i * 0.3); model.add(s);
+      }
+    }
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 12), main);
+    head.position.set(0, 0.95, 0.58); model.add(head);
+    const cheek1 = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 8), belly);
+    cheek1.position.set(-0.2, 0.86, 0.78); cheek1.scale.set(1, 0.7, 0.5); model.add(cheek1);
+    const cheek2 = cheek1.clone(); cheek2.position.x = 0.2; model.add(cheek2);
+    const earGeom = new THREE.ConeGeometry(0.16, 0.32, 4);
+    const ear1 = new THREE.Mesh(earGeom, main);
+    ear1.position.set(-0.22, 1.28, 0.52); ear1.rotation.z = -0.18; model.add(ear1);
+    const ear2 = ear1.clone(); ear2.position.x = 0.22; ear2.rotation.z = 0.18; model.add(ear2);
+    const innerGeom = new THREE.ConeGeometry(0.08, 0.18, 4);
+    const i1 = new THREE.Mesh(innerGeom, pinkMat);
+    i1.position.set(-0.22, 1.23, 0.55); i1.rotation.z = -0.18; model.add(i1);
+    const i2 = i1.clone(); i2.position.x = 0.22; i2.rotation.z = 0.18; model.add(i2);
+    const ew1 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), whiteMat);
+    ew1.position.set(-0.14, 1.02, 0.88); model.add(ew1);
+    const ew2 = ew1.clone(); ew2.position.x = 0.14; model.add(ew2);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: skin.eye });
+    const ep1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
+    ep1.position.set(-0.12, 1.02, 0.94); model.add(ep1);
+    const ep2 = ep1.clone(); ep2.position.x = 0.12; model.add(ep2);
+    const eb1 = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), blackMat);
+    eb1.position.set(-0.11, 1.02, 0.98); model.add(eb1);
+    const eb2 = eb1.clone(); eb2.position.x = 0.11; model.add(eb2);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6), pinkMat);
+    nose.position.set(0, 0.93, 0.97); model.add(nose);
+
+    const legGeom = new THREE.CylinderGeometry(0.085, 0.1, 0.42, 6);
+    const legs = [];
+    [[-0.22, 0.21, 0.3], [0.22, 0.21, 0.3], [-0.22, 0.21, -0.34], [0.22, 0.21, -0.34]].forEach(p => {
+      const l = new THREE.Mesh(legGeom, main);
+      l.position.set(...p); model.add(l); legs.push(l);
+      const paw = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 6), belly);
+      paw.position.set(p[0], 0.05, p[2]); paw.scale.y = 0.5; model.add(paw);
+    });
+
+    const tailGroup = new THREE.Group();
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.04, 0.9, 6), main);
+    tail.position.set(0, 0.4, 0); tailGroup.add(tail);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), belly);
+    tip.position.set(0, 0.85, 0); tailGroup.add(tip);
+    tailGroup.position.set(0, 0.7, -0.55); tailGroup.rotation.x = -0.35;
+    model.add(tailGroup);
+
+    // IMPORTANT: rotate model 180° so back faces camera (Subway Surfers view)
+    model.rotation.y = Math.PI;
+
+    const container = new THREE.Group();
+    container.add(model);
+    container.userData = { legs, tail: tailGroup, model };
+    return container;
+  }
+
+  // ============================================================
+  // DOG (rotated 180° too)
+  // ============================================================
+  function createDog() {
+    const model = new THREE.Group();
+    const brown = new THREE.MeshLambertMaterial({ color: 0x8B5A2B });
+    const darkBrown = new THREE.MeshLambertMaterial({ color: 0x5C3920 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const redMat = new THREE.MeshBasicMaterial({ color: 0xFF2222 });
+    const whiteMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.75, 1.4), brown);
+    body.position.y = 0.7; model.add(body);
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.6), darkBrown);
+    chest.position.set(0, 0.6, 0.55); model.add(chest);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.65, 0.7), brown);
+    head.position.set(0, 1.15, 0.95); model.add(head);
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.42), darkBrown);
+    snout.position.set(0, 1.0, 1.3); model.add(snout);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), blackMat);
+    nose.position.set(0, 1.07, 1.53); model.add(nose);
+    const earGeom = new THREE.BoxGeometry(0.2, 0.5, 0.22);
+    const ear1 = new THREE.Mesh(earGeom, darkBrown);
+    ear1.position.set(-0.38, 1.1, 0.88); ear1.rotation.z = 0.45; model.add(ear1);
+    const ear2 = ear1.clone(); ear2.position.x = 0.38; ear2.rotation.z = -0.45; model.add(ear2);
+    const eyeW1 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), whiteMat);
+    eyeW1.position.set(-0.2, 1.24, 1.26); model.add(eyeW1);
+    const eyeW2 = eyeW1.clone(); eyeW2.position.x = 0.2; model.add(eyeW2);
+    const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), redMat);
+    eye1.position.set(-0.2, 1.24, 1.32); model.add(eye1);
+    const eye2 = eye1.clone(); eye2.position.x = 0.2; model.add(eye2);
+    const browGeom = new THREE.BoxGeometry(0.2, 0.06, 0.06);
+    const brow1 = new THREE.Mesh(browGeom, blackMat);
+    brow1.position.set(-0.2, 1.34, 1.3); brow1.rotation.z = -0.38; model.add(brow1);
+    const brow2 = brow1.clone(); brow2.position.x = 0.2; brow2.rotation.z = 0.38; model.add(brow2);
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.08), blackMat);
+    mouth.position.set(0, 0.85, 1.5); model.add(mouth);
+    const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.06), whiteMat);
+    teeth.position.set(0, 0.83, 1.52); model.add(teeth);
+    for (let s of [-1, 1]) {
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.12, 4), whiteMat);
+      fang.position.set(s * 0.13, 0.74, 1.52); model.add(fang);
+    }
+    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.28), new THREE.MeshBasicMaterial({ color: 0xFF5577 }));
+    tongue.position.set(0, 0.75, 1.62); model.add(tongue);
+
+    const legGeom = new THREE.CylinderGeometry(0.12, 0.14, 0.55, 6);
+    const legs = [];
+    [[-0.3, 0.275, 0.5], [0.3, 0.275, 0.5], [-0.3, 0.275, -0.5], [0.3, 0.275, -0.5]].forEach(p => {
+      const l = new THREE.Mesh(legGeom, brown);
+      l.position.set(...p); model.add(l); legs.push(l);
+    });
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.04, 0.75, 6), brown);
+    tail.position.set(0, 1.05, -0.85); tail.rotation.x = -Math.PI / 3.5;
+    model.add(tail);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.07, 6, 12), new THREE.MeshLambertMaterial({ color: 0xFF3E5C }));
+    collar.position.set(0, 0.92, 0.9); collar.rotation.x = Math.PI / 2; collar.scale.z = 0.6;
+    model.add(collar);
+
+    model.rotation.y = Math.PI;
+
+    const container = new THREE.Group();
+    container.add(model);
+    container.userData = { legs, tail, tongue, model };
+    return container;
+  }
+
+  // ============================================================
+  // BIRD (collectible - replaces fish)
+  // ============================================================
+  function createBird() {
+    const g = new THREE.Group();
+    // Vary colors a bit
+    const colors = [0x3FA9F5, 0x9C27B0, 0xFFC107, 0xE91E63, 0x4CAF50];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const bodyMat = new THREE.MeshLambertMaterial({
+      color, emissive: color, emissiveIntensity: 0.15
+    });
+    const beakMat = new THREE.MeshLambertMaterial({ color: 0xFFB300 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), bodyMat);
+    body.scale.set(1, 0.9, 1.3);
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), bodyMat);
+    head.position.set(0, 0.1, 0.18);
+    g.add(head);
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.1, 4), beakMat);
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 0.08, 0.33);
+    g.add(beak);
+    const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), blackMat);
+    eye1.position.set(0.07, 0.13, 0.25);
+    g.add(eye1);
+    const eye2 = eye1.clone(); eye2.position.x = -0.07; g.add(eye2);
+
+    // Wings - flat triangles
+    const wingMat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0);
+    wingShape.lineTo(0.32, 0.06);
+    wingShape.lineTo(0.27, -0.12);
+    wingShape.lineTo(0, 0);
+    const wingGeom = new THREE.ShapeGeometry(wingShape);
+
+    const leftWing = new THREE.Mesh(wingGeom, wingMat);
+    leftWing.position.set(-0.08, 0.05, 0);
+    leftWing.rotation.set(0, 0, 0);
+    leftWing.scale.x = -1;
+    g.add(leftWing);
+    const rightWing = new THREE.Mesh(wingGeom, wingMat);
+    rightWing.position.set(0.08, 0.05, 0);
+    g.add(rightWing);
+
+    // Tail
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.18, 4), bodyMat);
+    tail.rotation.x = -Math.PI / 2;
+    tail.position.set(0, 0.02, -0.27);
+    g.add(tail);
+
+    g.userData = { leftWing, rightWing };
+    return g;
+  }
+
+  // ============================================================
+  // CAIXA DE LEITE (checkpoint — salva o nível)
+  // ============================================================
+  function createMilkBox() {
+    const g = new THREE.Group();
+    const white = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+    const blue = new THREE.MeshLambertMaterial({ color: 0x1976D2 });
+    const darkBlue = new THREE.MeshLambertMaterial({ color: 0x0D47A1 });
+    const gold = new THREE.MeshLambertMaterial({
+      color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 0.4
+    });
+
+    // Corpo da caixa (cartonado)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.45), white);
+    body.position.y = 0.4; g.add(body);
+
+    // Topo
+    const topShape = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.15, 0.1), white);
+    topShape.position.y = 0.85; g.add(topShape);
+
+    // Aba azul
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.46), blue);
+    flap.position.y = 0.78; g.add(flap);
+
+    // Rótulo frente e trás
+    const stripeF = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), blue);
+    stripeF.position.set(0, 0.45, 0.226); g.add(stripeF);
+    const stripeB = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), blue);
+    stripeB.position.set(0, 0.45, -0.226); stripeB.rotation.y = Math.PI; g.add(stripeB);
+
+    // Letra "L" minimalista no rótulo
+    const letterV = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.01), white);
+    letterV.position.set(-0.06, 0.45, 0.232); g.add(letterV);
+    const letterH = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.01), white);
+    letterH.position.set(-0.03, 0.38, 0.232); g.add(letterH);
+
+    // Base
+    const bottom = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 0.46), darkBlue);
+    bottom.position.y = 0.025; g.add(bottom);
+
+    // Estrela dourada flutuando em cima — vira pra chamar atenção
+    const star = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), gold);
+    star.position.y = 1.05;
+    star.scale.set(1, 0.6, 1);
+    g.add(star);
+
+    g.userData = { star, isMilkBox: true };
+    return g;
+  }
+
+  // ============================================================
+  // DECORATIONS (varies by theme)
+  // ============================================================
+  function createTree() {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.25, 1.2, 6),
+      new THREE.MeshLambertMaterial({ color: 0x6B4423 })
+    );
+    trunk.position.y = 0.6; g.add(trunk);
+    const leaves = new THREE.Mesh(
+      new THREE.ConeGeometry(0.85 + Math.random() * 0.3, 1.8, 7),
+      new THREE.MeshLambertMaterial({ color: 0x2E8B47 + Math.floor(Math.random() * 0x002200) })
+    );
+    leaves.position.y = 1.9; g.add(leaves);
+    return g;
+  }
+  function createPine() {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.22, 1.0, 6),
+      new THREE.MeshLambertMaterial({ color: 0x5C3F26 })
+    );
+    trunk.position.y = 0.5; g.add(trunk);
+    const snowMat = new THREE.MeshLambertMaterial({ color: 0xEAF2FF });
+    const greenMat = new THREE.MeshLambertMaterial({ color: 0x2E5C3E });
+    for (let i = 0; i < 3; i++) {
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.85 - i * 0.18, 0.9, 7), greenMat);
+      cone.position.y = 1.1 + i * 0.55; g.add(cone);
+      const snow = new THREE.Mesh(new THREE.ConeGeometry(0.86 - i * 0.18, 0.18, 7), snowMat);
+      snow.position.y = 1.5 + i * 0.55; g.add(snow);
+    }
+    return g;
+  }
+  function createPalm() {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.2, 2.4, 8),
+      new THREE.MeshLambertMaterial({ color: 0x8B6943 })
+    );
+    trunk.position.y = 1.2; g.add(trunk);
+    // ring details on trunk
+    for (let i = 0; i < 4; i++) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.16, 0.025, 4, 8),
+        new THREE.MeshLambertMaterial({ color: 0x5C4520 })
+      );
+      ring.position.y = 0.4 + i * 0.5;
+      ring.rotation.x = Math.PI / 2;
+      g.add(ring);
+    }
+    // Palm fronds
+    const frondMat = new THREE.MeshLambertMaterial({ color: 0x3CB371, side: THREE.DoubleSide });
+    for (let i = 0; i < 7; i++) {
+      const angle = (i / 7) * Math.PI * 2;
+      const frond = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.3), frondMat);
+      frond.position.set(Math.cos(angle) * 0.6, 2.45 + Math.sin(i) * 0.05, Math.sin(angle) * 0.6);
+      frond.rotation.y = angle + Math.PI / 2;
+      frond.rotation.z = -0.4;
+      g.add(frond);
+    }
+    // Coconuts
+    for (let i = 0; i < 3; i++) {
+      const coconut = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 6, 6),
+        new THREE.MeshLambertMaterial({ color: 0x4A2C0F })
+      );
+      const a = (i / 3) * Math.PI * 2;
+      coconut.position.set(Math.cos(a) * 0.18, 2.35, Math.sin(a) * 0.18);
+      g.add(coconut);
+    }
+    return g;
+  }
+  function createCherryTree() {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.22, 1.4, 6),
+      new THREE.MeshLambertMaterial({ color: 0x5C3F26 })
+    );
+    trunk.position.y = 0.7; g.add(trunk);
+    // Multiple pink puffs
+    const pinkMat = new THREE.MeshLambertMaterial({ color: 0xFFC0DA });
+    const pinkMat2 = new THREE.MeshLambertMaterial({ color: 0xFFD8E4 });
+    const positions = [[0, 1.6, 0], [0.4, 1.5, 0.2], [-0.35, 1.5, -0.1], [0.1, 1.85, -0.3], [-0.2, 1.85, 0.3]];
+    positions.forEach((p, i) => {
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55 + Math.random() * 0.1, 10, 8),
+        i % 2 === 0 ? pinkMat : pinkMat2
+      );
+      puff.position.set(...p);
+      g.add(puff);
+    });
+    return g;
+  }
+  function createPyramid() {
+    const g = new THREE.Group();
+    const sandMat = new THREE.MeshLambertMaterial({ color: 0xD4A968 });
+    const darkSandMat = new THREE.MeshLambertMaterial({ color: 0xB8895A });
+    // Different sized pyramids
+    const isLarge = Math.random() < 0.4;
+    if (isLarge) {
+      const big = new THREE.Mesh(new THREE.ConeGeometry(2.5, 3, 4), sandMat);
+      big.position.y = 1.5;
+      big.rotation.y = Math.PI / 4;
+      g.add(big);
+    } else {
+      const small = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.6, 4), darkSandMat);
+      small.position.y = 0.8;
+      small.rotation.y = Math.PI / 4;
+      g.add(small);
+    }
+    return g;
+  }
+
+  // ─── CHINA: Pagode ─────────────────────────────────────────
+  function createPagoda() {
+    const g = new THREE.Group();
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0xE8C85A });
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0xC9302C });
+    const baseMat = new THREE.MeshLambertMaterial({ color: 0x6E3B2E });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 1.6), baseMat);
+    base.position.y = 0.15; g.add(base);
+    const sizes = [1.2, 1.0, 0.8];
+    let y = 0.3;
+    for (let i = 0; i < 3; i++) {
+      const w = sizes[i];
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, w), wallMat);
+      wall.position.y = y + 0.3; g.add(wall);
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.85, 0.45, 4), roofMat);
+      roof.position.y = y + 0.85;
+      roof.rotation.y = Math.PI / 4;
+      g.add(roof);
+      y += 0.9;
+    }
+    const top = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.4, 6),
+      new THREE.MeshBasicMaterial({ color: 0xFFD700 }));
+    top.position.y = y + 0.05; g.add(top);
+    return g;
+  }
+
+  // ─── ARÁBIA: Mesquita ──────────────────────────────────────
+  function createMosque() {
+    const g = new THREE.Group();
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0xF5E6D3 });
+    const domeMat = new THREE.MeshLambertMaterial({
+      color: 0x4A90D9, emissive: 0x1A4070, emissiveIntensity: 0.3,
+    });
+    const goldMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.4), wallMat);
+    body.position.y = 0.55; g.add(body);
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+    dome.position.y = 1.1; g.add(dome);
+    const cresc = new THREE.Mesh(
+      new THREE.TorusGeometry(0.08, 0.025, 4, 12, Math.PI * 1.3), goldMat);
+    cresc.position.y = 1.95; cresc.rotation.z = Math.PI / 4; g.add(cresc);
+    const minaret = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 1.8, 8), wallMat);
+    minaret.position.set(1.05, 0.9, 0); g.add(minaret);
+    const minaretTop = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 8), domeMat);
+    minaretTop.position.set(1.05, 2.0, 0); g.add(minaretTop);
+    const arch = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7),
+      new THREE.MeshBasicMaterial({ color: 0x3A2010 }));
+    arch.position.set(0, 0.45, 0.71); g.add(arch);
+    return g;
+  }
+
+  // ─── FRANÇA: Torre Eiffel ──────────────────────────────────
+  function createEiffel() {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({ color: 0x6B5538 });
+    for (const [dx, dz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.08, 1.2, 6), mat);
+      leg.position.set(dx * 0.27, 0.6, dz * 0.27);
+      leg.rotation.x = -dz * 0.25;
+      leg.rotation.z = dx * 0.25;
+      g.add(leg);
+    }
+    const plat1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.7), mat);
+    plat1.position.y = 1.2; g.add(plat1);
+    const mid = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.18, 0.9, 6), mat);
+    mid.position.y = 1.65; g.add(mid);
+    const plat2 = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.05, 0.32), mat);
+    plat2.position.y = 2.12; g.add(plat2);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.07, 0.65, 6), mat);
+    top.position.y = 2.45; g.add(top);
+    const ant = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.18, 5),
+      new THREE.MeshBasicMaterial({ color: 0xFFE066 }));
+    ant.position.y = 2.85; g.add(ant);
+    return g;
+  }
+
+  // ─── LONDRES: Big Ben ──────────────────────────────────────
+  function createBigBen() {
+    const g = new THREE.Group();
+    const stoneMat = new THREE.MeshLambertMaterial({ color: 0xB8A878 });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x4A4035 });
+    const goldMat = new THREE.MeshBasicMaterial({ color: 0xE8C760 });
+    const clockMat = new THREE.MeshBasicMaterial({ color: 0xF0E6D0 });
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.4, 0.7), stoneMat);
+    tower.position.y = 1.2; g.add(tower);
+    for (const x of [-0.36, 0.36]) {
+      for (let i = 0; i < 5; i++) {
+        const line = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.45, 0.72), darkMat);
+        line.position.set(x, 0.4 + i * 0.45, 0); g.add(line);
+      }
+    }
+    for (const [dx, dz, ry] of [
+      [0, 0.36, 0], [0, -0.36, Math.PI],
+      [0.36, 0, Math.PI/2], [-0.36, 0, -Math.PI/2]
+    ]) {
+      const face = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), clockMat);
+      face.position.set(dx, 2.05, dz); face.rotation.y = ry; g.add(face);
+    }
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.5, 4), darkMat);
+    roof.position.y = 2.65; roof.rotation.y = Math.PI / 4; g.add(roof);
+    const goldTip = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.4, 6), goldMat);
+    goldTip.position.y = 3.05; g.add(goldTip);
+    return g;
+  }
+
+  // ============================================================
+  // INIMIGOS POR MUNDO (cada tema tem seu inimigo + projétil)
+  // ============================================================
+  function createEnemyBase(bodyColor, headColor) {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+    const headMat = new THREE.MeshLambertMaterial({ color: headColor });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 1.1, 8), bodyMat);
+    body.position.y = 0.55; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), headMat);
+    head.position.y = 1.32; g.add(head);
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.55, 6), bodyMat);
+    armL.position.set(-0.4, 0.85, 0); armL.rotation.z = 0.4; g.add(armL);
+    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.55, 6), bodyMat);
+    armR.position.set(0.4, 0.85, 0); armR.rotation.z = -0.4; g.add(armR);
+    g.userData = { body, head, armL, armR, lastShot: 0 };
+    return g;
+  }
+
+  // 🐉 DRAGÃO CHINÊS
+  function createDragon() {
+    const g = createEnemyBase(0xCC2929, 0xE73C3C);
+    g.scale.setScalar(1.15);
+    // Asas
+    const wingMat = new THREE.MeshLambertMaterial({ color: 0x6B0B0B });
+    for (const x of [-0.7, 0.7]) {
+      const w = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 3), wingMat);
+      w.position.set(x, 1.0, -0.1);
+      w.rotation.set(Math.PI / 2, 0, x > 0 ? -0.6 : 0.6);
+      g.add(w);
+    }
+    // Chifres dourados
+    for (const x of [-0.13, 0.13]) {
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 4),
+        new THREE.MeshBasicMaterial({ color: 0xFFE066 }));
+      horn.position.set(x, 1.65, 0);
+      g.add(horn);
+    }
+    return g;
+  }
+
+  // 🧟 MÚMIA EGÍPCIA
+  function createMummy() {
+    const g = createEnemyBase(0xE8DDC4, 0xE8DDC4);
+    // Faixas escuras enroladas
+    const stripeMat = new THREE.MeshLambertMaterial({ color: 0xB8A878 });
+    for (let i = 0; i < 4; i++) {
+      const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.04, 4, 12), stripeMat);
+      stripe.position.y = 0.25 + i * 0.25;
+      stripe.rotation.x = Math.PI / 2;
+      g.add(stripe);
+    }
+    // Olhos vermelhos brilhantes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
+    for (const x of [-0.1, 0.1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat);
+      eye.position.set(x, 1.35, 0.25);
+      g.add(eye);
+    }
+    return g;
+  }
+
+  // ⚽ JOGADOR BRASILEIRO
+  function createPlayer() {
+    const g = createEnemyBase(0xFFEB3B, 0xC0915E);  // camisa amarela
+    // Shorts azuis
+    const shorts = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.35, 8),
+      new THREE.MeshLambertMaterial({ color: 0x0066CC }));
+    shorts.position.y = 0.15; g.add(shorts);
+    // Faixa verde do peito
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.7),
+      new THREE.MeshLambertMaterial({ color: 0x00C853 }));
+    stripe.position.y = 0.95; g.add(stripe);
+    return g;
+  }
+
+  // 🧞 GÊNIO ÁRABE
+  function createGenie() {
+    const g = createEnemyBase(0x4A90E2, 0x6BA8F0);
+    g.userData.body.scale.x = 1.3;
+    // Turbante dourado
+    const turban = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: 0xFFD700 }));
+    turban.position.y = 1.5; g.add(turban);
+    const gem = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xFF1493 }));
+    gem.position.set(0, 1.62, 0.27); g.add(gem);
+    // Sem pernas — flutua
+    g.position.y = 0.3;
+    return g;
+  }
+
+  // 🎨 PINTOR FRANCÊS
+  function createPainter() {
+    const g = createEnemyBase(0xD4D4D4, 0xE8C49F);  // camisa cinza claro
+    // Boina preta
+    const beret = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.08, 12),
+      new THREE.MeshLambertMaterial({ color: 0x1A1A1A }));
+    beret.position.y = 1.5; g.add(beret);
+    // Pequena alça de boina
+    const stem = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6),
+      new THREE.MeshLambertMaterial({ color: 0x1A1A1A }));
+    stem.position.y = 1.57; g.add(stem);
+    // Pincel na mão
+    const brush = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 4),
+      new THREE.MeshLambertMaterial({ color: 0x8B4513 }));
+    brush.position.set(0.55, 0.95, 0); brush.rotation.z = -0.8; g.add(brush);
+    return g;
+  }
+
+  // 🧟 ZUMBI DE LONDRES
+  function createZombie() {
+    const g = createEnemyBase(0x6B8E3D, 0x8FAF5C);  // pele esverdeada
+    // Olhos brancos vazios
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xF0F0F0 });
+    for (const x of [-0.09, 0.09]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
+      eye.position.set(x, 1.35, 0.25);
+      g.add(eye);
+    }
+    // Rasgos na camisa (manchas escuras)
+    const stainMat = new THREE.MeshLambertMaterial({ color: 0x3A1F0A });
+    const stain = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.05), stainMat);
+    stain.position.set(0, 0.7, 0.32); g.add(stain);
+    // Braços estendidos
+    g.userData.armL.rotation.z = 1.4;
+    g.userData.armR.rotation.z = -1.4;
+    g.userData.armL.position.y = 1.0;
+    g.userData.armR.position.y = 1.0;
+    return g;
+  }
+
+  // 🥷 NINJA JAPONÊS
+  function createNinja() {
+    const g = createEnemyBase(0x1A1A1A, 0x1A1A1A);  // tudo preto
+    // Faixa vermelha (testa)
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 4, 12),
+      new THREE.MeshLambertMaterial({ color: 0xCC0000 }));
+    band.position.y = 1.38; band.rotation.x = Math.PI / 2;
+    g.add(band);
+    // Olhos brancos finos
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xF0F0F0 });
+    for (const x of [-0.1, 0.1]) {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.025, 0.01), eyeMat);
+      eye.position.set(x, 1.32, 0.27); g.add(eye);
+    }
+    return g;
+  }
+
+  function createEnemyForTheme(themeId) {
+    switch (themeId) {
+      case 'china':   return createDragon();
+      case 'egito':   return createMummy();
+      case 'brasil':  return createPlayer();
+      case 'arabia':  return createGenie();
+      case 'franca':  return createPainter();
+      case 'londres': return createZombie();
+      case 'japao':   return createNinja();
+      default: return createMummy();
+    }
+  }
+
+  // ============================================================
+  // PROJÉTEIS por tema
+  // ============================================================
+  function createProjectileForTheme(themeId) {
+    const g = new THREE.Group();
+    switch (themeId) {
+      case 'china': {  // 🔥 bola de fogo
+        const core = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0xFF6B00 }));
+        g.add(core);
+        const halo = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0xFFD700, transparent: true, opacity: 0.5 }));
+        g.add(halo);
+        break;
+      }
+      case 'egito': {  // 🧪 ácido verde
+        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0x00FF66 }));
+        drop.scale.y = 1.4;
+        g.add(drop);
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0x88FFAA, transparent: true, opacity: 0.45 }));
+        g.add(glow);
+        break;
+      }
+      case 'brasil': {  // ⚽ bola de futebol
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8),
+          new THREE.MeshLambertMaterial({ color: 0xFFFFFF }));
+        g.add(ball);
+        // Pentágonos pretos
+        for (let i = 0; i < 4; i++) {
+          const pent = new THREE.Mesh(new THREE.CircleGeometry(0.06, 5),
+            new THREE.MeshBasicMaterial({ color: 0x000000 }));
+          const angle = (i / 4) * Math.PI * 2;
+          pent.position.set(Math.cos(angle) * 0.2, Math.sin(angle) * 0.15, 0.18);
+          pent.lookAt(0, 0, 1);
+          g.add(pent);
+        }
+        break;
+      }
+      case 'arabia': {  // 🔮 orb mágico roxo
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0x9C27B0 }));
+        g.add(orb);
+        const sparkle = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8),
+          new THREE.MeshBasicMaterial({ color: 0xE040FB, transparent: true, opacity: 0.5 }));
+        g.add(sparkle);
+        break;
+      }
+      case 'franca': {  // 🎨 tinta colorida
+        const colors = [0xFF0000, 0x0066FF, 0xFFD700, 0x00C853];
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        const blob = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8),
+          new THREE.MeshLambertMaterial({ color: c }));
+        blob.scale.set(1.1, 0.85, 1.1);
+        g.add(blob);
+        break;
+      }
+      case 'londres': {  // 🧪 slime cinza-esverdeado
+        const slime = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8),
+          new THREE.MeshLambertMaterial({ color: 0x556B2F }));
+        slime.scale.y = 0.7;
+        g.add(slime);
+        const drip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6),
+          new THREE.MeshLambertMaterial({ color: 0x6B8E3D }));
+        drip.position.y = -0.2; g.add(drip);
+        break;
+      }
+      case 'japao': {  // 🌟 shuriken (estrela 4 pontas)
+        const shuriken = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.25, 0),
+          new THREE.MeshLambertMaterial({ color: 0x4A4A4A, emissive: 0x222222 })
+        );
+        shuriken.scale.set(1, 0.15, 1);
+        g.add(shuriken);
+        break;
+      }
+    }
+    g.userData = { themeId, velocity: new THREE.Vector3(), spinSpeed: 5 + Math.random() * 5 };
+    return g;
+  }
+
+  // ============================================================
+  // ❤️ CORAÇÃO DE VIDA (pickup)
+  // ============================================================
+  function createHeart() {
+    const g = new THREE.Group();
+    const heartMat = new THREE.MeshLambertMaterial({
+      color: 0xFF3E5C, emissive: 0xFF3E5C, emissiveIntensity: 0.4,
+    });
+    const left = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), heartMat);
+    left.position.set(-0.14, 0.05, 0);
+    g.add(left);
+    const right = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), heartMat);
+    right.position.set(0.14, 0.05, 0);
+    g.add(right);
+    const bottom = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.46, 4), heartMat);
+    bottom.position.set(0, -0.27, 0);
+    bottom.rotation.y = Math.PI / 4;
+    bottom.scale.y = 1.2;
+    g.add(bottom);
+    // Glow embaixo
+    const glow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.6, 16),
+      new THREE.MeshBasicMaterial({ color: 0xFF7090, transparent: true, opacity: 0.4 })
+    );
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = -0.5;
+    g.add(glow);
+    g.userData = { isHeart: true, glow };
+    return g;
+  }
+
+  // ============================================================
+  // 🐾 GARRA — power-up especial (rage mode)
+  // ============================================================
+  function createClaw() {
+    const g = new THREE.Group();
+    const goldMat = new THREE.MeshLambertMaterial({
+      color: 0xFFD700, emissive: 0xCC8800, emissiveIntensity: 0.5,
+    });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x8B0000 });
+
+    // Base preta tipo emblema
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.4, 0.12, 12),
+      new THREE.MeshLambertMaterial({ color: 0x1A1A1A })
+    );
+    base.position.y = 0; g.add(base);
+
+    // 3 garras curvas (cones)
+    for (let i = 0; i < 3; i++) {
+      const claw = new THREE.Mesh(
+        new THREE.ConeGeometry(0.06, 0.45, 6),
+        goldMat
+      );
+      const angle = -0.4 + i * 0.4;
+      claw.position.set(angle * 0.3, 0.25, 0);
+      claw.rotation.z = angle * 1.2;
+      g.add(claw);
+    }
+
+    // Pegada de gato — círculos
+    const pawCenter = new THREE.Mesh(
+      new THREE.CircleGeometry(0.18, 12),
+      new THREE.MeshBasicMaterial({ color: 0xFF3030 })
+    );
+    pawCenter.position.set(0, 0.07, 0);
+    pawCenter.rotation.x = -Math.PI / 2;
+    g.add(pawCenter);
+
+    // Halo embaixo
+    const halo = new THREE.Mesh(
+      new THREE.CircleGeometry(0.7, 16),
+      new THREE.MeshBasicMaterial({ color: 0xFFAA00, transparent: true, opacity: 0.5 })
+    );
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = -0.05;
+    g.add(halo);
+
+    g.userData = { isClaw: true, halo };
+    return g;
+  }
+
+  // ============================================================
+  // 👮 GUARDA (carrocinha) — humano com revólver
+  // ============================================================
+  function createGuard() {
+    const g = new THREE.Group();
+    const uniMat = new THREE.MeshLambertMaterial({ color: 0x1F3A5F }); // azul-marinho
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xE8C49F });
+    const hatMat = new THREE.MeshLambertMaterial({ color: 0x0A1830 });
+    const gunMat = new THREE.MeshLambertMaterial({ color: 0x2F2F2F });
+
+    // Corpo
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.32), uniMat);
+    torso.position.y = 0.75; g.add(torso);
+    // Cinto preto
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.08, 0.34),
+      new THREE.MeshLambertMaterial({ color: 0x1A1A1A }));
+    belt.position.y = 0.42; g.add(belt);
+    // Pernas
+    for (const x of [-0.13, 0.13]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.22), uniMat);
+      leg.position.set(x, 0.12, 0); g.add(leg);
+    }
+    // Braços
+    for (const x of [-0.35, 0.35]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), uniMat);
+      arm.position.set(x, 0.78, 0.0);
+      g.add(arm);
+    }
+    // Cabeça
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), skinMat);
+    head.position.y = 1.32; g.add(head);
+    // Boné
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.1, 12), hatMat);
+    cap.position.y = 1.5; g.add(cap);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.18), hatMat);
+    visor.position.set(0, 1.46, 0.2); g.add(visor);
+    // Estrela dourada no boné
+    const star = new THREE.Mesh(new THREE.CircleGeometry(0.05, 5),
+      new THREE.MeshBasicMaterial({ color: 0xFFD700 }));
+    star.position.set(0, 1.55, 0.18);
+    star.rotation.x = -0.3;
+    g.add(star);
+    // Olhos brancos
+    for (const x of [-0.07, 0.07]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x000000 }));
+      eye.position.set(x, 1.32, 0.2); g.add(eye);
+    }
+    // Revólver na mão direita
+    const gun = new THREE.Group();
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.05), gunMat);
+    grip.position.y = 0; gun.add(grip);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.22, 6), gunMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.05, 0.13); gun.add(barrel);
+    gun.position.set(0.35, 0.78, 0.18);
+    g.add(gun);
+    g.userData = { gun, lastShot: 0, shotsFired: 0, dying: false };
+    return g;
+  }
+
+  // 🔫 Bala — projétil rápido em linha reta
+  function createBullet() {
+    const g = new THREE.Group();
+    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xFFCC00 });
+    const tracerMat = new THREE.MeshBasicMaterial({
+      color: 0xFF6600, transparent: true, opacity: 0.7,
+    });
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.22, 6), bulletMat);
+    head.rotation.x = Math.PI / 2;
+    g.add(head);
+    const tracer = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.35, 6), tracerMat);
+    tracer.rotation.x = Math.PI / 2;
+    tracer.position.z = -0.2;
+    g.add(tracer);
+    g.userData = { velocity: new THREE.Vector3(), isBullet: true };
+    return g;
+  }
+
+  function createDecor(type) {
+    switch (type) {
+      case 'pine': return createPine();
+      case 'palm': return createPalm();
+      case 'cherry': return createCherryTree();
+      case 'pyramid': return createPyramid();
+      case 'pagoda': return createPagoda();
+      case 'mosque': return createMosque();
+      case 'eiffel': return createEiffel();
+      case 'bigben': return createBigBen();
+      case 'tree':
+      default: return createTree();
+    }
+  }
+
+  // ============================================================
+  // GROUND TILE
+  // ============================================================
+  function createTile() {
+    const tile = new THREE.Group();
+
+    const grass = new THREE.Mesh(
+      new THREE.PlaneGeometry(40, GROUND_TILE_LEN),
+      new THREE.MeshLambertMaterial({ color: activeTheme.ground })
+    );
+    grass.rotation.x = -Math.PI / 2;
+    tile.add(grass);
+
+    const path = new THREE.Mesh(
+      new THREE.PlaneGeometry(7, GROUND_TILE_LEN),
+      new THREE.MeshLambertMaterial({ color: activeTheme.path })
+    );
+    path.rotation.x = -Math.PI / 2;
+    path.position.y = 0.01;
+    tile.add(path);
+
+    // Lane divider lines
+    const laneGroup = new THREE.Group();
+    for (let lx of [-1, 1]) {
+      for (let i = 0; i < 8; i++) {
+        const dash = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.1, 1.5),
+          new THREE.MeshBasicMaterial({ color: 0xFFFFFF })
+        );
+        dash.rotation.x = -Math.PI / 2;
+        dash.position.set(lx, 0.02, -GROUND_TILE_LEN/2 + 1.5 + i * (GROUND_TILE_LEN/8));
+        laneGroup.add(dash);
+      }
+    }
+    tile.add(laneGroup);
+
+    const decorations = new THREE.Group();
+    tile.add(decorations);
+
+    tile.userData = { grass, path, decorations };
+    populateDecorations(tile);
+    return tile;
+  }
+
+  function populateDecorations(tile) {
+    const decor = tile.userData.decorations;
+    while (decor.children.length) decor.remove(decor.children[0]);
+
+    for (let side of [-1, 1]) {
+      const numDecor = activeTheme.decor === 'pyramid' ? 3 : 5;
+      for (let i = 0; i < numDecor; i++) {
+        const z = -GROUND_TILE_LEN/2 + 2 + i * (GROUND_TILE_LEN/numDecor) + (Math.random() - 0.5) * 2;
+        const x = side * (4 + Math.random() * (activeTheme.decor === 'pyramid' ? 8 : 5));
+        const d = createDecor(activeTheme.decor);
+        d.position.set(x, 0, z);
+        d.rotation.y = Math.random() * Math.PI * 2;
+        d.scale.setScalar(0.8 + Math.random() * 0.4);
+        decor.add(d);
+      }
+      // Distant hill
+      const hill = new THREE.Mesh(
+        new THREE.SphereGeometry(5, 10, 6),
+        new THREE.MeshLambertMaterial({ color: new THREE.Color(activeTheme.ground).multiplyScalar(0.8) })
+      );
+      hill.position.set(side * 16, -3, -GROUND_TILE_LEN/2 + Math.random() * GROUND_TILE_LEN);
+      hill.scale.set(1.2, 0.6, 1);
+      decor.add(hill);
+    }
+  }
+
+  function applyThemeToTile(tile) {
+    tile.userData.grass.material.color.setHex(activeTheme.ground);
+    tile.userData.path.material.color.setHex(activeTheme.path);
+    populateDecorations(tile);
+  }
+
+  // ============================================================
+  // OBSTACLES
+  // ============================================================
+  function createObstacle(type) {
+    let obs;
+    if (type === 'low') {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.38, 0.42, 0.85, 12),
+        new THREE.MeshLambertMaterial({ color: 0x5A6470 })
+      );
+      body.position.y = 0.425; group.add(body);
+      const lid = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.43, 0.43, 0.1, 12),
+        new THREE.MeshLambertMaterial({ color: 0x3A434D })
+      );
+      lid.position.y = 0.88; group.add(lid);
+      for (let i = 0; i < 3; i++) {
+        const r = new THREE.Mesh(
+          new THREE.TorusGeometry(0.4, 0.025, 4, 12),
+          new THREE.MeshLambertMaterial({ color: 0x3A434D })
+        );
+        r.position.y = 0.2 + i * 0.2; r.rotation.x = Math.PI / 2;
+        group.add(r);
+      }
+      obs = group;
+      obs.userData = { type, yMin: 0, yMax: 0.95 };
+    } else if (type === 'high') {
+      const group = new THREE.Group();
+      const beamMat = new THREE.MeshLambertMaterial({ color: 0xFF3E5C });
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 0.4), beamMat);
+      beam.position.y = 1.05; group.add(beam);
+      for (let i = -1; i <= 1; i += 0.5) {
+        const stripe = new THREE.Mesh(
+          new THREE.BoxGeometry(0.15, 0.32, 0.02),
+          new THREE.MeshBasicMaterial({ color: 0xFFFFFF })
+        );
+        stripe.position.set(i * 0.7, 1.05, 0.22);
+        group.add(stripe);
+      }
+      const pillarMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+      for (let s of [-1, 1]) {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.2, 0.16), pillarMat);
+        pillar.position.set(s * 0.78, 0.6, 0); group.add(pillar);
+      }
+      obs = group;
+      obs.userData = { type, yMin: 0.85, yMax: 1.25 };
+    } else {
+      const group = new THREE.Group();
+      const crate = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 1.3, 0.85),
+        new THREE.MeshLambertMaterial({ color: 0xA86B3B })
+      );
+      crate.position.y = 0.65; group.add(crate);
+      for (let i = 0; i < 3; i++) {
+        const plank = new THREE.Mesh(
+          new THREE.BoxGeometry(1.42, 0.05, 0.86),
+          new THREE.MeshLambertMaterial({ color: 0x6B4423 })
+        );
+        plank.position.y = 0.2 + i * 0.4; group.add(plank);
+      }
+      obs = group;
+      obs.userData = { type, yMin: 0, yMax: 1.3 };
+    }
+    return obs;
+  }
+
+  // ============================================================
+  // SETUP WORLD
+  // ============================================================
+  let cat = createCat();
+  cat.position.set(0, 0, 0);
+  scene.add(cat);
+
+  // Aura dourada ao redor do gato (visível só durante o TURBO)
+  const catAura = new THREE.Group();
+  const auraInner = new THREE.Mesh(
+    new THREE.SphereGeometry(0.85, 16, 12),
+    new THREE.MeshBasicMaterial({
+      color: 0xFFD700, transparent: true, opacity: 0.0,
+      side: THREE.BackSide, depthWrite: false,
+    })
+  );
+  const auraOuter = new THREE.Mesh(
+    new THREE.SphereGeometry(1.3, 16, 12),
+    new THREE.MeshBasicMaterial({
+      color: 0xFF8C00, transparent: true, opacity: 0.0,
+      side: THREE.BackSide, depthWrite: false,
+    })
+  );
+  auraInner.position.y = 0.7;
+  auraOuter.position.y = 0.7;
+  catAura.add(auraInner);
+  catAura.add(auraOuter);
+  catAura.userData = { auraInner, auraOuter };
+  cat.add(catAura);
+
+  // Reconstrói o gato com a skin selecionada (mantém posição + aura)
+  function rebuildCatWithSkin() {
+    const pos = cat.position.clone();
+    const rot = cat.rotation.clone();
+    cat.remove(catAura);
+    scene.remove(cat);
+    cat = createCat(getSelectedSkin());
+    cat.position.copy(pos);
+    cat.rotation.copy(rot);
+    cat.add(catAura);
+    scene.add(cat);
+  }
+
+  const dog = createDog();
+  dog.position.set(0, 0, 4);
+  scene.add(dog);
+
+  // Shadow blobs
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 });
+  const catShadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 14), shadowMat);
+  catShadow.rotation.x = -Math.PI / 2; catShadow.position.y = 0.03; scene.add(catShadow);
+  const dogShadow = new THREE.Mesh(new THREE.CircleGeometry(0.6, 14), shadowMat);
+  dogShadow.rotation.x = -Math.PI / 2; dogShadow.position.y = 0.03; dogShadow.position.z = 4;
+  scene.add(dogShadow);
+
+  // Ground tiles
+  const groundTiles = [];
+  for (let i = 0; i < NUM_GROUND_TILES; i++) {
+    const t = createTile();
+    t.position.z = -i * GROUND_TILE_LEN + GROUND_TILE_LEN;
+    scene.add(t);
+    groundTiles.push(t);
+  }
+
+  // Stars layer (for night level)
+  const stars = new THREE.Group();
+  for (let i = 0; i < 80; i++) {
+    const star = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 5, 4),
+      new THREE.MeshBasicMaterial({ color: 0xFFFFFF })
+    );
+    star.position.set(
+      (Math.random() - 0.5) * 60,
+      8 + Math.random() * 12,
+      -30 - Math.random() * 40
+    );
+    stars.add(star);
+  }
+  stars.visible = false;
+  scene.add(stars);
+
+  // Snow particles (for snow level)
+  const snowParticles = new THREE.Group();
+  for (let i = 0; i < 60; i++) {
+    const flake = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 4, 4),
+      new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.85 })
+    );
+    flake.position.set(
+      (Math.random() - 0.5) * 30,
+      Math.random() * 12,
+      -30 + Math.random() * 40
+    );
+    flake.userData = { fallSpeed: 1 + Math.random() * 2, drift: (Math.random() - 0.5) * 0.5 };
+    snowParticles.add(flake);
+  }
+  snowParticles.visible = false;
+  scene.add(snowParticles);
+
+  // Pools
+  const obstacles = [];
+  const birds = [];
+  const milkBoxes = [];
+  const destroyingObstacles = [];
+  const enemies = [];
+  const projectiles = [];
+  const hearts = [];
+  const claws = [];
+  const guards = [];
+  const bullets = [];
+
+  // ============================================================
+  // SPAWN E ATAQUE DE INIMIGOS
+  // ============================================================
+  function spawnEnemy() {
+    const themeId = activeTheme.id;
+    const enemy = createEnemyForTheme(themeId);
+    // Numa pista aleatória, à frente
+    const lane = Math.floor(Math.random() * 3);
+    enemy.position.set(LANES[lane], 0, state.nextSpawnZ - 4);
+    enemy.userData.themeId = themeId;
+    enemy.userData.lastShot = animTime;
+    enemy.userData.shotsFired = 0;
+    scene.add(enemy);
+    enemies.push(enemy);
+  }
+
+  function fireProjectile(enemy) {
+    const proj = createProjectileForTheme(enemy.userData.themeId);
+    proj.position.copy(enemy.position);
+    proj.position.y += 1.3;
+    // Velocidade aponta pro gato (lane atual + altura)
+    const target = new THREE.Vector3(
+      cat.position.x,
+      state.catY + 0.7,
+      cat.position.z
+    );
+    const dir = target.sub(proj.position).normalize();
+    proj.userData.velocity.copy(dir.multiplyScalar(11));
+    scene.add(proj);
+    projectiles.push(proj);
+    // Som leve
+    if (audioCtx) {
+      try {
+        playNote(280 + Math.random() * 200, audioCtx.currentTime, 0.1, 'sawtooth', 0.06);
+      } catch (e) {}
+    }
+  }
+
+  // ============================================================
+  // 🐾 CLAW MODE — ativar/desativar
+  // ============================================================
+  function activateClaw() {
+    state.clawActive = true;
+    state.clawTimer = CLAW_DURATION;
+    state.nextGuardAt = state.runTime + 0.6;
+    document.body.classList.add('claw-mode');
+    // Mostra HUD da garra
+    const bar = document.getElementById('claw-bar');
+    if (bar) bar.classList.add('active');
+    // Toast visual
+    const toast = document.getElementById('claw-toast');
+    if (toast) {
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+    // Música frenética
+    startFreneticMusic();
+    // Som de poder
+    if (audioCtx) {
+      try {
+        const t = audioCtx.currentTime;
+        playNote(400, t, 0.08, 'square', 0.18);
+        playNote(700, t + 0.07, 0.1, 'square', 0.16);
+        playNote(1200, t + 0.16, 0.15, 'sawtooth', 0.14);
+      } catch (e) {}
+    }
+  }
+
+  function deactivateClaw() {
+    state.clawActive = false;
+    state.clawTimer = 0;
+    document.body.classList.remove('claw-mode');
+    slashPoints = [];
+    // Limpa o canvas do slash
+    if (slashCtx) slashCtx.clearRect(0, 0, slashCanvas.width, slashCanvas.height);
+    const bar = document.getElementById('claw-bar');
+    if (bar) bar.classList.remove('active');
+    // Limpa guardas restantes (eles fogem)
+    for (let i = guards.length - 1; i >= 0; i--) {
+      const gd = guards[i];
+      if (!gd.userData.dying) {
+        gd.userData.dying = true;
+        gd.userData.dyingTimer = 0;
+      }
+    }
+    // Volta música normal
+    stopFreneticMusic();
+    if (activeTheme) playThemeMusic(activeTheme.id);
+  }
+
+  function spawnGuard() {
+    const lane = Math.floor(Math.random() * 3);
+    const gd = createGuard();
+    gd.position.set(LANES[lane], 0, state.nextSpawnZ - 5);
+    gd.userData.lastShot = animTime - 0.5;
+    scene.add(gd);
+    guards.push(gd);
+  }
+
+  function fireBullet(guard) {
+    const b = createBullet();
+    b.position.copy(guard.position);
+    b.position.y += 0.8;
+    b.position.z += 0.2;
+    // Direção em linha reta pro gato (mira aproximada)
+    const target = new THREE.Vector3(
+      cat.position.x + (Math.random() - 0.5) * 0.3,  // pequena imprecisão
+      state.catY + 0.7,
+      cat.position.z
+    );
+    const dir = target.sub(b.position).normalize();
+    b.userData.velocity.copy(dir.multiplyScalar(15));  // bala é mais rápida que projétil
+    // Aponta visualmente
+    b.lookAt(b.position.clone().add(dir));
+    scene.add(b);
+    bullets.push(b);
+    // Som de tiro
+    if (audioCtx) {
+      try {
+        const t = audioCtx.currentTime;
+        playNote(180, t, 0.04, 'square', 0.16);
+        playNote(80, t + 0.02, 0.08, 'sawtooth', 0.1);
+      } catch (e) {}
+    }
+  }
+
+  function killGuard(guard) {
+    guard.userData.dying = true;
+    guard.userData.dyingTimer = 0;
+    state.score += CLAW_SCORE_PER_KILL;
+    sfxCollect();
+    // Bullets-tiroteios desse guarda já vão sair de cena naturalmente
+  }
+
+  // ============================================================
+  // 🐾 SLASH TRAIL — estilo Fruit Ninja
+  //
+  //   Funciona pra GARRA, LAÇO e LASER — cada um com cor diferente
+  //   Mouse/touch arrasta → desenha rastro → destrói o que cruzar
+  // ============================================================
+  const slashCanvas = document.getElementById('slash-trail');
+  const slashCtx = slashCanvas.getContext('2d');
+  let slashPoints = [];
+  const SLASH_FADE = 0.35;
+  const SLASH_HITRADIUS = 38;
+  const PROJ_SCREEN = new THREE.Vector3();
+
+  // Está em modo slash? (qualquer dos 3 que dão poder de desenhar)
+  function isSlashing() {
+    return state.clawActive || pupActive.ribbon > 0 || pupActive.laser > 0;
+  }
+  // Cor/glow do slash atual
+  function slashColors() {
+    if (pupActive.laser > 0)  return { outer: 'rgba(255, 20, 20, 0.7)', inner: 'rgba(255, 200, 200, 0.95)',
+                                       shadow: '#FF0000', innerShadow: '#FFAAAA' };
+    if (pupActive.ribbon > 0) return { outer: 'rgba(255, 30, 150, 0.65)', inner: 'rgba(255, 220, 240, 0.95)',
+                                       shadow: '#FF1493', innerShadow: '#FFB0D0' };
+    return { outer: 'rgba(255, 140, 0, 0.6)', inner: 'rgba(255, 245, 200, 0.95)',
+             shadow: '#FF6B00', innerShadow: '#FFE066' };
+  }
+
+  function resizeSlashCanvas() {
+    slashCanvas.width = window.innerWidth;
+    slashCanvas.height = window.innerHeight;
+  }
+  resizeSlashCanvas();
+  window.addEventListener('resize', resizeSlashCanvas);
+
+  function addSlashPoint(clientX, clientY) {
+    if (!isSlashing()) return;
+    slashPoints.push({ x: clientX, y: clientY, t: animTime });
+    if (slashPoints.length > 60) slashPoints.shift();
+  }
+
+  // Calcula posição em tela (pixels) de um objeto 3D
+  function projectToScreen(obj) {
+    PROJ_SCREEN.copy(obj.position);
+    PROJ_SCREEN.project(camera);
+    return {
+      x: (PROJ_SCREEN.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-PROJ_SCREEN.y * 0.5 + 0.5) * window.innerHeight,
+      z: PROJ_SCREEN.z,  // se > 1, está atrás da câmera
+    };
+  }
+
+  // Distância de um ponto à linha entre p1 e p2
+  function pointSegDist(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = x1 + t * dx, cy = y1 + t * dy;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  // Checa se algum dos segmentos recentes do slash passa perto desse objeto
+  function isSlashedThisFrame(obj) {
+    if (slashPoints.length < 2) return false;
+    const sp = projectToScreen(obj);
+    if (sp.z > 1) return false;
+    for (let i = slashPoints.length - 1; i > 0; i--) {
+      const p1 = slashPoints[i];
+      const p2 = slashPoints[i - 1];
+      if (animTime - p1.t > 0.12) break;
+      const d = pointSegDist(sp.x, sp.y, p1.x, p1.y, p2.x, p2.y);
+      if (d < SLASH_HITRADIUS) return true;
+    }
+    return false;
+  }
+
+  function drawSlashTrail() {
+    const ctx = slashCtx;
+    ctx.clearRect(0, 0, slashCanvas.width, slashCanvas.height);
+    if (!isSlashing() || slashPoints.length < 2) return;
+    const cutoff = animTime - SLASH_FADE;
+    slashPoints = slashPoints.filter(p => p.t > cutoff);
+    if (slashPoints.length < 2) return;
+
+    const c = slashColors();
+    // Borrão externo
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = c.outer;
+    ctx.lineWidth = 28;
+    ctx.shadowColor = c.shadow;
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    for (let i = 0; i < slashPoints.length; i++) {
+      const p = slashPoints[i];
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else         ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+    // Linha interna
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = c.innerShadow;
+    ctx.strokeStyle = c.inner;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    for (let i = 0; i < slashPoints.length; i++) {
+      const p = slashPoints[i];
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else         ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  function applySlashHits() {
+    if (!isSlashing() || slashPoints.length < 2) return;
+    let anyHit = false;
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      if (isSlashedThisFrame(bullets[i])) {
+        scene.remove(bullets[i]); bullets.splice(i, 1);
+        state.score += CLAW_SCORE_PER_BULLET;
+        anyHit = true;
+      }
+    }
+    for (const gd of guards) {
+      if (!gd.userData.dying && isSlashedThisFrame(gd)) {
+        killGuard(gd); anyHit = true;
+      }
+    }
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      if (isSlashedThisFrame(projectiles[i])) {
+        scene.remove(projectiles[i]); projectiles.splice(i, 1);
+        state.score += CLAW_SCORE_PER_BULLET;
+        anyHit = true;
+      }
+    }
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      if (isSlashedThisFrame(enemies[i])) {
+        scene.remove(enemies[i]); enemies.splice(i, 1);
+        state.score += CLAW_SCORE_PER_KILL;
+        anyHit = true;
+      }
+    }
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      if (isSlashedThisFrame(obstacles[i])) {
+        destroyObstacle(obstacles[i]);
+        anyHit = true;
+      }
+    }
+    if (anyHit && audioCtx) {
+      try { playNote(900 + Math.random() * 300, audioCtx.currentTime, 0.05, 'triangle', 0.10); }
+      catch (e) {}
+    }
+  }
+  // ============================================================
+  // VIDAS (corações no HUD)
+  // ============================================================
+  function updateHeartsHUD() {
+    const row = document.getElementById('hearts-row');
+    if (!row) return;
+    let html = '';
+    for (let i = 0; i < MAX_LIVES; i++) {
+      if (i < state.lives) html += '❤️';
+      else html += '<span class="heart-lost">🖤</span>';
+    }
+    row.innerHTML = html;
+  }
+
+  // ============================================================
+  // MÚSICA POR TEMA (HTML <audio> tags)
+  //   Se o MP3 não existir em ./musics/, fica silencioso (ok).
+  // ============================================================
+  let currentThemeAudio = null;
+
+  function playThemeMusic(themeId) {
+    // Pausa o anterior se for diferente
+    if (currentThemeAudio && currentThemeAudio.dataset.themeId !== themeId) {
+      try { currentThemeAudio.pause(); currentThemeAudio.currentTime = 0; } catch (e) {}
+      currentThemeAudio = null;
+    }
+    const el = document.getElementById('audio-' + themeId);
+    if (!el) return;
+    el.dataset.themeId = themeId;
+    el.volume = muted ? 0 : 0.55;
+    // play() pode falhar (autoplay bloqueado ou arquivo inexistente) — ok
+    el.play().then(() => {
+      currentThemeAudio = el;
+    }).catch(() => {
+      // silencioso — vai cair de volta no synth
+    });
+  }
+
+  function stopThemeMusic() {
+    if (currentThemeAudio) {
+      try { currentThemeAudio.pause(); currentThemeAudio.currentTime = 0; } catch (e) {}
+      currentThemeAudio = null;
+    }
+  }
+
+  // ============================================================
+  // MUNDOS VISITADOS (localStorage)
+  // ============================================================
+  const VISITED_KEY = 'catEscapes:themesVisited';
+  function loadThemesVisited() {
+    try {
+      const v = localStorage.getItem(VISITED_KEY);
+      return v ? JSON.parse(v) : [];
+    } catch (e) { return []; }
+  }
+  function saveThemesVisited(themeIds) {
+    try {
+      const existing = loadThemesVisited();
+      const merged = Array.from(new Set([...existing, ...themeIds]));
+      localStorage.setItem(VISITED_KEY, JSON.stringify(merged));
+      return merged;
+    } catch (e) { return []; }
+  }
+
+  // ============================================================
+  // TURBO (poder da caixa de leite)
+  // ============================================================
+  const POWER_DURATION = 6.0;
+  const POWER_SPEED_MULT = 1.65;
+  const POWER_SCORE_PER_SMASH = 50;
+
+  function activateTurbo() {
+    state.powerActive = true;
+    state.powerTimer = POWER_DURATION;
+    document.getElementById('power-bar').classList.add('active');
+    document.getElementById('save-flash').classList.add('show');
+    setTimeout(() => document.getElementById('save-flash').classList.remove('show'), 280);
+    const toast = document.getElementById('save-toast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+  }
+
+  function deactivateTurbo() {
+    state.powerActive = false;
+    state.powerTimer = 0;
+    document.getElementById('power-bar').classList.remove('active');
+  }
+
+  function updateTurboHUD() {
+    const pct = Math.max(0, state.powerTimer / POWER_DURATION) * 100;
+    document.getElementById('power-fill').style.width = pct + '%';
+  }
+
+  // ============================================================
+  // GAME STATE
+  // ============================================================
+  // Constantes pra balanceamento
+  const MAX_LIVES = 7;
+  const INVULN_AFTER_HIT = 1.5;
+  const MAX_SPEED_BONUS = 10;      // 8 → 18 max (era 7, antes 14)
+  const ACCEL_RATE = 0.13;         // meio termo entre 0.10 e 0.31
+  const BASE_SPEED = 8;
+
+  const state = {
+    running: false,
+    gameOver: false,
+    introPlaying: false,
+    baseSpeed: BASE_SPEED,
+    speed: BASE_SPEED,
+    score: 0,
+    birds: 0,
+    catY: 0,
+    catYVel: 0,
+    sliding: false,
+    slideTimer: 0,
+    laneIndex: 1,
+    laneTarget: 0,
+    nextSpawnZ: -20,
+    runTime: 0,
+    level: 0,
+    themeOrder: shuffleThemeOrder(),
+    activeThemeIdx: 0,
+    lastThemeId: null,
+    visitedThisRun: new Set(),
+    nextBarkTime: 5,
+    spawnMilkBoxNext: false,
+    powerActive: false,
+    powerTimer: 0,
+    lives: MAX_LIVES,
+    invulnTimer: 0,
+    catBlinkTimer: 0,
+    nextEnemyAt: 18,    // primeiro inimigo aos 18s
+    lastLevelTime: 0,   // tempo da última mudança de nível
+    clawActive: false,
+    clawTimer: 0,
+    nextClawAt: 25,     // primeiro spawn de garra após 25s
+    nextGuardAt: 0,
+  };
+
+  // Constantes da garra
+  const CLAW_DURATION = 12.0;        // 12s em modo garra
+  const CLAW_GUARD_INTERVAL = 2.2;   // novo guarda a cada 2.2s
+  const CLAW_SCORE_PER_KILL = 100;
+  const CLAW_SCORE_PER_BULLET = 30;
+
+  // ============================================================
+  // SPAWNING
+  // ============================================================
+  function spawnRow() {
+    const lanesUsed = new Set();
+    // Obstáculo duplo: após 20s com 30% (entre 15s/45% e 30s/25%)
+    const numObs = state.runTime > 20 && Math.random() < 0.30 ? 2 : 1;
+    for (let i = 0; i < numObs; i++) {
+      let lane, attempts = 0;
+      do { lane = Math.floor(Math.random() * 3); attempts++; } while (lanesUsed.has(lane) && attempts < 8);
+      if (lanesUsed.size >= 2) break;
+      lanesUsed.add(lane);
+      const types = ['low', 'high', 'full'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const obs = createObstacle(type);
+      obs.position.x = LANES[lane];
+      obs.position.z = state.nextSpawnZ;
+      scene.add(obs);
+      obstacles.push(obs);
+    }
+    const freeLanes = [0, 1, 2].filter(l => !lanesUsed.has(l));
+
+    // 🥛 CAIXA DE LEITE — bem mais frequente (5% vs antigo 1.2%)
+    // Permite até 2 caixas simultâneas pra dar mais combos de turbo
+    const shouldSpawnMilk = state.spawnMilkBoxNext
+      || (state.runTime > 6 && milkBoxes.length < 2 && Math.random() < 0.05);
+    if (shouldSpawnMilk && freeLanes.length > 0) {
+      const lane = freeLanes[Math.floor(Math.random() * freeLanes.length)];
+      const mb = createMilkBox();
+      mb.position.set(LANES[lane], 0, state.nextSpawnZ);
+      scene.add(mb);
+      milkBoxes.push(mb);
+      state.spawnMilkBoxNext = false;
+      lanesUsed.add(lane);
+    }
+
+    const remainingLanes = [0, 1, 2].filter(l => !lanesUsed.has(l));
+
+    // ❤️ Coração de vida: spawna ocasionalmente quando o gato tá com vidas faltando
+    const needsHealing = state.lives < MAX_LIVES;
+    const shouldSpawnHeart = needsHealing && remainingLanes.length > 0 && hearts.length < 1
+      && state.runTime > 15 && Math.random() < 0.04;
+    if (shouldSpawnHeart) {
+      const lane = remainingLanes[Math.floor(Math.random() * remainingLanes.length)];
+      const h = createHeart();
+      h.position.set(LANES[lane], 1.0, state.nextSpawnZ);
+      scene.add(h);
+      hearts.push(h);
+      lanesUsed.add(lane);
+    }
+
+    const stillFree = [0, 1, 2].filter(l => !lanesUsed.has(l));
+    if (stillFree.length > 0 && Math.random() < 0.68) {
+      const lane = stillFree[Math.floor(Math.random() * stillFree.length)];
+      const count = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        const b = createBird();
+        b.position.set(LANES[lane], 1.0, state.nextSpawnZ - i * 1.4);
+        scene.add(b);
+        birds.push(b);
+      }
+    }
+  }
+
+  // ============================================================
+  // INPUT
+  // ============================================================
+  function moveLane(dir) {
+    if (!state.running) return;
+    const prev = state.laneIndex;
+    state.laneIndex = Math.max(0, Math.min(2, state.laneIndex + dir));
+    if (prev !== state.laneIndex) {
+      state.laneTarget = LANES[state.laneIndex];
+      sfxLane();
+    }
+  }
+  function doJump() {
+    if (!state.running) return;
+    if (state.catY < 0.05 && !state.sliding) {
+      state.catYVel = JUMP_FORCE;
+      sfxJump();
+    }
+  }
+  function doSlide() {
+    if (!state.running) return;
+    if (state.catY < 0.05 && !state.sliding) {
+      state.sliding = true;
+      state.slideTimer = SLIDE_DURATION;
+      sfxSlide();
+    }
+  }
+
+  let touchStartX = 0, touchStartY = 0, touchActive = false;
+  const canvas = document.getElementById('game-canvas');
+  canvas.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchActive = true;
+    if (isSlashing()) {
+      addSlashPoint(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    if (!isSlashing() || e.touches.length !== 1) return;
+    addSlashPoint(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  canvas.addEventListener('touchend', e => {
+    if (!touchActive) return;
+    touchActive = false;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    if (Math.max(ax, ay) < 25) return;
+    if (ax > ay) {
+      if (dx > 0) moveLane(1); else moveLane(-1);
+    } else {
+      if (dy < 0) doJump(); else doSlide();
+    }
+  }, { passive: true });
+  // Mouse — quando qualquer modo slash ativo, movimento risca a tela
+  canvas.addEventListener('mousedown', e => {
+    if (isSlashing()) addSlashPoint(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('mousemove', e => {
+    if (isSlashing()) addSlashPoint(e.clientX, e.clientY);
+  });
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'arrowleft' || k === 'a') moveLane(-1);
+    else if (k === 'arrowright' || k === 'd') moveLane(1);
+    else if (k === 'arrowup' || k === 'w' || k === ' ') doJump();
+    else if (k === 'arrowdown' || k === 's') doSlide();
+  });
+
+  // ============================================================
+  // COLLISIONS
+  // ============================================================
+  function checkObstacleHit() {
+    const catX = cat.position.x;
+    const catBottom = state.catY;
+    const catTop = state.catY + (state.sliding ? 0.55 : 1.35);
+    for (const obs of obstacles) {
+      const dz = obs.position.z;
+      if (dz < -0.55 || dz > 0.55) continue;
+      if (Math.abs(obs.position.x - catX) > 0.7) continue;
+      if (catBottom < obs.userData.yMax - 0.05 && catTop > obs.userData.yMin + 0.05) return obs;
+    }
+    return null;
+  }
+  function pickupBird() {
+    for (let i = birds.length - 1; i >= 0; i--) {
+      const b = birds[i];
+      if (Math.abs(b.position.z) < 0.7 && Math.abs(b.position.x - cat.position.x) < 0.7 && Math.abs(b.position.y - (state.catY + 0.6)) < 1.3) {
+        state.birds += 1;
+        state.score += 25;
+        scene.remove(b);
+        birds.splice(i, 1);
+        sfxBird();
+        const flash = document.getElementById('flash');
+        flash.classList.add('show');
+        setTimeout(() => flash.classList.remove('show'), 80);
+      }
+    }
+  }
+
+  function pickupMilkBox() {
+    for (let i = milkBoxes.length - 1; i >= 0; i--) {
+      const mb = milkBoxes[i];
+      // Hitbox generosa
+      if (Math.abs(mb.position.z) < 1.0
+          && Math.abs(mb.position.x - cat.position.x) < 0.9
+          && state.catY < 1.6) {
+        scene.remove(mb);
+        milkBoxes.splice(i, 1);
+        state.score += 100;
+        sfxLevelUp();
+        activateTurbo();
+      }
+    }
+  }
+
+  // Anima um obstáculo "explodindo" quando o gato turbo bate nele
+  function destroyObstacle(obs) {
+    const idx = obstacles.indexOf(obs);
+    if (idx >= 0) obstacles.splice(idx, 1);
+    // Preparar materiais pra fade
+    obs.traverse(o => {
+      if (o.isMesh && o.material) {
+        if (Array.isArray(o.material)) {
+          o.material = o.material.map(m => {
+            const c = m.clone();
+            c.transparent = true;
+            return c;
+          });
+        } else {
+          o.material = o.material.clone();
+          o.material.transparent = true;
+        }
+      }
+    });
+    const startTime = animTime;
+    const baseY = obs.position.y;
+    obs.userData._destroying = true;
+    obs.userData._destroyT0 = startTime;
+    obs.userData._baseY = baseY;
+    destroyingObstacles.push(obs);
+    sfxBird(); // som de pop
+    state.score += POWER_SCORE_PER_SMASH;
+  }
+
+  // ============================================================
+  // LEVEL SYSTEM
+  // ============================================================
+  function applyTheme(themeIdx, instant = false) {
+    activeTheme = THEMES[themeIdx];
+    state.activeThemeIdx = themeIdx;
+    state.lastThemeId = activeTheme.id;
+    state.visitedThisRun.add(activeTheme.id);
+    scene.background = makeSkyTexture(activeTheme.sky);
+    scene.fog.color.setHex(activeTheme.fog);
+    scene.fog.near = activeTheme.fogDist[0];
+    scene.fog.far = activeTheme.fogDist[1];
+    sun.color.setHex(activeTheme.sunColor);
+    sun.intensity = activeTheme.sun;
+    ambient.intensity = activeTheme.ambient;
+    stars.visible = !!activeTheme.stars;
+    snowParticles.visible = !!activeTheme.snow;
+    if (instant) {
+      groundTiles.forEach(applyThemeToTile);
+    }
+    currentMelodyId = activeTheme.id;
+    document.getElementById('level-tag').textContent = `${activeTheme.flag} ${tTheme(activeTheme.id)}`;
+    // Música do tema (MP3 externo se existir; senão a synth continua)
+    playThemeMusic(activeTheme.id);
+  }
+
+  function showLevelBanner(themeIdx) {
+    const banner = document.getElementById('level-banner');
+    banner.querySelector('.banner-num').textContent = `${t('world')} ${state.level + 1}`;
+    banner.querySelector('.banner-name').textContent = tTheme(THEMES[themeIdx].id);
+    banner.querySelector('.banner-flag').textContent = THEMES[themeIdx].flag;
+    banner.classList.add('show');
+    setTimeout(() => banner.classList.remove('show'), 3500);
+  }
+
+  function checkLevelUp() {
+    const newLevel = Math.floor(state.runTime / LEVEL_DURATION);
+    // Guarda: nunca muda de nível antes de 5s do jogo OU se mudou há menos de 8s
+    if (newLevel !== state.level
+        && state.runTime > 5
+        && state.runTime - state.lastLevelTime > 8) {
+      state.level = newLevel;
+      state.lastLevelTime = state.runTime;
+      // Após passar por todos os mundos, reshuffle (sem repetir o último)
+      if (newLevel >= state.themeOrder.length) {
+        state.themeOrder = shuffleThemeOrder(state.lastThemeId);
+      }
+      const idxInOrder = newLevel % state.themeOrder.length;
+      const themeIdx = state.themeOrder[idxInOrder];
+      applyTheme(themeIdx);
+      showLevelBanner(themeIdx);
+      sfxLevelUp();
+      state.spawnMilkBoxNext = true;
+    }
+  }
+
+  // ============================================================
+  // ANIMATION LOOP
+  // ============================================================
+  const clock = new THREE.Clock();
+  let animTime = 0;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    animTime += dt;
+
+    if (state.running && !state.gameOver) {
+      update(dt);
+    } else {
+      idleAnimate(dt);
+    }
+    animateAmbient(dt);
+    renderer.render(scene, camera);
+  }
+
+  function animateAmbient(dt) {
+    // Snow falling
+    if (snowParticles.visible) {
+      snowParticles.children.forEach(f => {
+        f.position.y -= f.userData.fallSpeed * dt;
+        f.position.x += f.userData.drift * dt;
+        if (f.position.y < 0) {
+          f.position.y = 12;
+          f.position.x = (Math.random() - 0.5) * 30;
+        }
+      });
+    }
+    // Stars twinkle
+    if (stars.visible) {
+      const t = animTime * 2;
+      stars.children.forEach((s, i) => {
+        s.scale.setScalar(0.6 + Math.abs(Math.sin(t + i)) * 0.6);
+      });
+    }
+    // Bird wing flapping animation (anywhere)
+    birds.forEach(b => {
+      const flap = Math.sin(animTime * 18) * 0.6;
+      b.userData.leftWing.rotation.z = flap;
+      b.userData.rightWing.rotation.z = -flap;
+    });
+  }
+
+  function idleAnimate(dt) {
+    const t = animTime * 6;
+    cat.userData.legs.forEach((leg, i) => {
+      leg.rotation.x = Math.sin(t + i * Math.PI * 0.8) * 0.15;
+    });
+    cat.userData.tail.rotation.z = Math.sin(t * 0.7) * 0.15;
+    dog.position.y = Math.abs(Math.sin(animTime * 2.5)) * 0.1;
+    dog.userData.tail.rotation.z = Math.sin(animTime * 3) * 0.3;
+  }
+
+  function update(dt) {
+    state.runTime += dt;
+    // Velocidade sobe suavemente até bater no teto (em ~70 segundos)
+    const speedBonus = Math.min(MAX_SPEED_BONUS, state.runTime * ACCEL_RATE);
+    state.speed = state.baseSpeed + speedBonus;
+    state.score += dt * state.speed * 1.5;
+
+    // Invulnerabilidade após hit
+    if (state.invulnTimer > 0) {
+      state.invulnTimer -= dt;
+      state.catBlinkTimer += dt;
+      const blink = Math.floor(state.catBlinkTimer * 10) % 2 === 0;
+      cat.visible = blink;
+      if (state.invulnTimer <= 0) {
+        cat.visible = true;
+        state.catBlinkTimer = 0;
+      }
+    }
+
+    checkLevelUp();
+
+    // ⚡ TURBO: decrementa timer, atualiza HUD, controla aura
+    if (state.powerActive) {
+      state.powerTimer -= dt;
+      updateTurboHUD();
+      // Pulsa a aura
+      if (catAura) {
+        const pulse = 0.5 + Math.abs(Math.sin(animTime * 8)) * 0.3;
+        catAura.userData.auraInner.material.opacity = 0.35 * pulse;
+        catAura.userData.auraOuter.material.opacity = 0.18 * pulse;
+        // Cresce um pouco ao bater
+        const scale = 1 + Math.sin(animTime * 12) * 0.05;
+        catAura.scale.setScalar(scale);
+      }
+      if (state.powerTimer <= 0) {
+        deactivateTurbo();
+      }
+    } else if (catAura) {
+      // Aura desliga gradual quando turbo acaba
+      catAura.userData.auraInner.material.opacity *= 0.9;
+      catAura.userData.auraOuter.material.opacity *= 0.9;
+    }
+
+    // Velocidade do mundo (boost se turbo ativo)
+    const speedMult = state.powerActive ? POWER_SPEED_MULT : 1;
+    const moveZ = state.speed * speedMult * dt;
+
+    // Ground tiles
+    for (const tile of groundTiles) {
+      tile.position.z += moveZ;
+      if (tile.position.z > GROUND_TILE_LEN) {
+        tile.position.z -= GROUND_TILE_LEN * NUM_GROUND_TILES;
+        applyThemeToTile(tile);
+      }
+    }
+
+    // Obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      obstacles[i].position.z += moveZ;
+      if (obstacles[i].position.z > 6) { scene.remove(obstacles[i]); obstacles.splice(i, 1); }
+    }
+
+    // Obstáculos sendo destruídos — anima e remove no fim
+    for (let i = destroyingObstacles.length - 1; i >= 0; i--) {
+      const obs = destroyingObstacles[i];
+      const t = (animTime - obs.userData._destroyT0) / 0.45;
+      if (t >= 1) {
+        scene.remove(obs);
+        destroyingObstacles.splice(i, 1);
+        continue;
+      }
+      obs.position.z += moveZ;
+      obs.position.y = obs.userData._baseY + t * 2.5;
+      obs.rotation.y = t * 8;
+      obs.rotation.z = t * 5;
+      obs.scale.setScalar(1 + t * 0.8);
+      obs.traverse(o => {
+        if (o.isMesh && o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(m => { if (m.opacity !== undefined) m.opacity = 1 - t; });
+        }
+      });
+    }
+
+    // Birds
+    for (let i = birds.length - 1; i >= 0; i--) {
+      const b = birds[i];
+      b.position.z += moveZ;
+      b.position.y = 1.0 + Math.sin(animTime * 4 + b.position.z) * 0.18;
+      b.rotation.y += dt * 0.5;
+      if (b.position.z > 6) { scene.remove(b); birds.splice(i, 1); }
+    }
+
+    // Milk boxes — checkpoints
+    for (let i = milkBoxes.length - 1; i >= 0; i--) {
+      const mb = milkBoxes[i];
+      mb.position.z += moveZ;
+      mb.position.y = 0.05 + Math.abs(Math.sin(animTime * 3)) * 0.15;
+      mb.rotation.y += dt * 1.5;
+      if (mb.userData.star) {
+        mb.userData.star.scale.setScalar(1 + Math.sin(animTime * 5) * 0.15);
+      }
+      if (mb.position.z > 6) { scene.remove(mb); milkBoxes.splice(i, 1); }
+    }
+
+    // ❤️ Corações de vida — flutuam, giram, removem quando passam
+    for (let i = hearts.length - 1; i >= 0; i--) {
+      const h = hearts[i];
+      h.position.z += moveZ;
+      h.position.y = 1.0 + Math.sin(animTime * 4) * 0.18;
+      h.rotation.y += dt * 2;
+      // Pickup
+      if (Math.abs(h.position.z) < 0.9
+          && Math.abs(h.position.x - cat.position.x) < 0.8
+          && Math.abs(h.position.y - (state.catY + 0.7)) < 1.2
+          && state.lives < MAX_LIVES) {
+        scene.remove(h);
+        hearts.splice(i, 1);
+        state.lives = Math.min(MAX_LIVES, state.lives + 1);
+        updateHeartsHUD();
+        state.score += 50;
+        sfxLevelUp();
+        // Flash sutil rosa
+        const flash = document.getElementById('flash');
+        flash.style.background = 'radial-gradient(ellipse at top, rgba(255,180,200,0.55), transparent 70%)';
+        flash.classList.add('show');
+        setTimeout(() => {
+          flash.classList.remove('show');
+          setTimeout(() => { flash.style.background = ''; }, 200);
+        }, 90);
+        continue;
+      }
+      if (h.position.z > 6) { scene.remove(h); hearts.splice(i, 1); }
+    }
+
+    // ============================================================
+    // 🐾 GARRA — pickup + modo "rage" temporário
+    // ============================================================
+    // Spawn ocasional da garra (item raro: 1 por minuto-ish, e só quando não tá ativo)
+    if (state.runTime > state.nextClawAt && !state.clawActive && claws.length === 0) {
+      // Spawna numa pista aleatória, mais à frente
+      const lane = Math.floor(Math.random() * 3);
+      const c = createClaw();
+      c.position.set(LANES[lane], 0.6, state.nextSpawnZ + 2);
+      scene.add(c);
+      claws.push(c);
+      state.nextClawAt = state.runTime + 50 + Math.random() * 30; // só de novo em 50-80s
+    }
+
+    // Anima garras existentes + pickup
+    for (let i = claws.length - 1; i >= 0; i--) {
+      const c = claws[i];
+      c.position.z += moveZ;
+      c.position.y = 0.6 + Math.sin(animTime * 3.5) * 0.2;
+      c.rotation.y += dt * 2.5;
+      // Halo pulsando
+      if (c.userData.halo) {
+        c.userData.halo.scale.setScalar(1 + Math.sin(animTime * 6) * 0.15);
+      }
+      // Pickup
+      if (Math.abs(c.position.z) < 1.0
+          && Math.abs(c.position.x - cat.position.x) < 0.8
+          && Math.abs(c.position.y - (state.catY + 0.7)) < 1.4) {
+        scene.remove(c); claws.splice(i, 1);
+        activateClaw();
+        continue;
+      }
+      if (c.position.z > 6) { scene.remove(c); claws.splice(i, 1); }
+    }
+
+    // Modo garra ativo: spawna guardas + atualiza timer
+    if (state.clawActive) {
+      state.clawTimer -= dt;
+      if (state.runTime > state.nextGuardAt) {
+        spawnGuard();
+        state.nextGuardAt = state.runTime + CLAW_GUARD_INTERVAL + Math.random() * 0.8;
+      }
+      // HUD do timer
+      const pct = Math.max(0, (state.clawTimer / CLAW_DURATION) * 100);
+      const fill = document.getElementById('claw-fill');
+      if (fill) fill.style.width = pct + '%';
+
+      // ✂️ Aplica destruição pra tudo que o rastro cruzou neste frame
+      applySlashHits();
+
+      if (state.clawTimer <= 0) {
+        deactivateClaw();
+      }
+    }
+    // Desenha o rastro do slash (mesmo após desativar, pra fadeout)
+    drawSlashTrail();
+
+    // ============================================================
+    // 🎁 POWER-UPS — atualiza ativos e cooldowns
+    // ============================================================
+    // Cooldowns
+    for (const id of ['cape','ribbon','laser']) {
+      if (pupCooldown[id] > 0) pupCooldown[id] -= dt;
+      if (pupActive[id] > 0) {
+        pupActive[id] -= dt;
+        if (pupActive[id] <= 0) {
+          pupActive[id] = 0;
+          if (id === 'cape')   deactivateCape();
+          if (id === 'laser')  deactivateLaser();
+          if (id === 'ribbon') deactivateRibbon();
+        }
+      }
+    }
+    // CAPA — voa pra cima + invulnerável (sem piscar — gato fica visível)
+    if (pupActive.cape > 0) {
+      const targetY = 3.5;
+      state.catY += (targetY - state.catY) * Math.min(1, dt * 4);
+      state.catYVel = 0;
+      // NÃO usa invulnTimer (que faz piscar) — colisão já checa pupActive.cape
+      cat.visible = true;
+      // Anima capa ondulando + reage à mudança de lane
+      if (capeAttached) {
+        const dxLane = state.laneTarget - cat.position.x;
+        capeAttached.rotation.z = -dxLane * 0.6 + Math.sin(animTime * 4) * 0.08;
+        capeAttached.rotation.x = 0.45 + Math.sin(animTime * 9) * 0.18;
+        capeAttached.position.y = 1.0 + Math.sin(animTime * 6) * 0.05;
+      }
+    }
+    // LASER — só pulsa visual; destruição é via slash (desenhar na tela)
+    if (pupActive.laser > 0 && laserBeam1) {
+      const pulse = 0.5 + Math.sin(animTime * 30) * 0.25;
+      laserBeam1.material.opacity = pulse;
+      laserBeam2.material.opacity = pulse;
+    }
+    // Aplica destruição do slash (vale pra garra, laço e laser)
+    applySlashHits();
+    // Atualiza HUD dos powerups (cooldown countdown visível)
+    refreshPupHud();
+
+    // Update guardas (mover, atirar, morrer)
+    for (let i = guards.length - 1; i >= 0; i--) {
+      const gd = guards[i];
+      gd.position.z += moveZ;
+      gd.position.y = Math.abs(Math.sin(animTime * 4)) * 0.04;
+
+      // Olha pro gato
+      const dx = cat.position.x - gd.position.x;
+      const dz = cat.position.z - gd.position.z;
+      gd.rotation.y = Math.atan2(dx, dz);
+
+      // Atira balas a cada ~0.9s, até 2 tiros por guarda
+      if (!gd.userData.dying && gd.position.z > -14 && gd.position.z < 2
+          && animTime - gd.userData.lastShot > 0.9
+          && gd.userData.shotsFired < 2) {
+        fireBullet(gd);
+        gd.userData.lastShot = animTime;
+        gd.userData.shotsFired += 1;
+      }
+
+      // Cat passou perto → morte por garra (auto-kill)
+      if (!gd.userData.dying && state.clawActive) {
+        const distX = Math.abs(gd.position.x - cat.position.x);
+        const distZ = Math.abs(gd.position.z - cat.position.z);
+        if (distX < 1.2 && distZ < 1.5) {
+          killGuard(gd);
+        }
+      }
+
+      // Animação de morte
+      if (gd.userData.dying) {
+        gd.userData.dyingTimer += dt;
+        gd.rotation.x = Math.min(Math.PI / 2, gd.userData.dyingTimer * 5);
+        gd.position.y = Math.max(0, 0.5 - gd.userData.dyingTimer * 2);
+        if (gd.userData.dyingTimer > 0.8) {
+          scene.remove(gd); guards.splice(i, 1);
+          continue;
+        }
+      }
+
+      if (gd.position.z > 7) { scene.remove(gd); guards.splice(i, 1); }
+    }
+
+    // Update bullets: movem em linha reta + colisão com gato + remove ao sair
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];
+      b.position.add(b.userData.velocity.clone().multiplyScalar(dt));
+
+      // Colisão com gato
+      const bdx = b.position.x - cat.position.x;
+      const bdy = b.position.y - (state.catY + 0.7);
+      const bdz = b.position.z - cat.position.z;
+      if (Math.abs(bdx) < 0.6 && Math.abs(bdy) < 0.7 && Math.abs(bdz) < 0.5) {
+        scene.remove(b); bullets.splice(i, 1);
+        if (state.invulnTimer <= 0 && !state.powerActive && pupActive.cape <= 0) {
+          state.lives -= 1;
+          updateHeartsHUD();
+          sfxHit();
+          state.invulnTimer = INVULN_AFTER_HIT;
+          state.catBlinkTimer = 0;
+          if (state.lives <= 0) {
+            triggerGameOver();
+            return;
+          }
+        }
+        continue;
+      }
+      // Remove fora da tela
+      if (b.position.z > 8 || b.position.z < -40
+          || Math.abs(b.position.x) > 15 || b.position.y < -2) {
+        scene.remove(b); bullets.splice(i, 1);
+      }
+    }
+
+    // ============================================================
+    // 👹 INIMIGOS POR MUNDO
+    // ============================================================
+    // Spawn periódico
+    if (state.runTime > state.nextEnemyAt && enemies.length === 0) {
+      spawnEnemy();
+      state.nextEnemyAt = state.runTime + 14 + Math.random() * 6;  // 14-20s
+    }
+
+    // Atualiza inimigos: move, faz idle, dispara
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      e.position.z += moveZ;
+      // Idle animation (oscila)
+      e.position.y = Math.abs(Math.sin(animTime * 3)) * 0.05;
+      if (e.userData.head) e.userData.head.rotation.y = Math.sin(animTime * 2) * 0.3;
+      // Olha pro gato
+      const dz = cat.position.z - e.position.z;
+      if (dz < 0) e.rotation.y = Math.atan2(cat.position.x - e.position.x, dz);
+
+      // Dispara projétil quando relativamente perto, max 3 disparos por inimigo
+      if (e.position.z > -16 && e.position.z < 2
+          && animTime - e.userData.lastShot > 1.6
+          && e.userData.shotsFired < 3) {
+        fireProjectile(e);
+        e.userData.lastShot = animTime;
+        e.userData.shotsFired += 1;
+        // Anima braço pra parecer arremesso
+        if (e.userData.armR) {
+          e.userData.armR.rotation.x = -1.5;
+          setTimeout(() => { if (e.userData.armR) e.userData.armR.rotation.x = 0; }, 200);
+        }
+      }
+      // Remove quando passou
+      if (e.position.z > 7) { scene.remove(e); enemies.splice(i, 1); }
+    }
+
+    // Atualiza projéteis: move, gira, checa colisão
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+      p.position.add(p.userData.velocity.clone().multiplyScalar(dt));
+      // Adiciona também movimento do mundo (cena fluindo)
+      p.position.z += moveZ * 0.3;
+      p.rotation.x += dt * p.userData.spinSpeed;
+      p.rotation.y += dt * p.userData.spinSpeed * 1.3;
+
+      // Colisão com gato
+      const dx = p.position.x - cat.position.x;
+      const dy = p.position.y - (state.catY + 0.7);
+      const dz = p.position.z - cat.position.z;
+      if (Math.abs(dx) < 0.6 && Math.abs(dy) < 0.8 && Math.abs(dz) < 0.6) {
+        scene.remove(p); projectiles.splice(i, 1);
+        if (state.powerActive || pupActive.cape > 0) {
+          // TURBO/CAPA — destrói o projétil sem dano
+          state.score += 25;
+        } else if (state.invulnTimer <= 0) {
+          state.lives -= 1;
+          updateHeartsHUD();
+          sfxHit();
+          state.invulnTimer = INVULN_AFTER_HIT;
+          state.catBlinkTimer = 0;
+          if (state.lives <= 0) {
+            if (!continueUsedThisRun) {
+              // Mostra overlay com botão CONTINUAR (mesmo que game over de obstáculo)
+              triggerGameOver();
+              return;
+            } else {
+              triggerGameOver();
+              return;
+            }
+          }
+        }
+        continue;
+      }
+      // Remove quando passou
+      if (p.position.z > 8 || p.position.y < -2 || p.position.y > 8) {
+        scene.remove(p); projectiles.splice(i, 1);
+      }
+    }
+
+    // Spawning
+    state.nextSpawnZ += moveZ;
+    if (state.nextSpawnZ > -22) {
+      spawnRow();
+      const gap = 6.5 + Math.random() * 3.5 - Math.min(1.5, state.runTime * 0.025);
+      state.nextSpawnZ -= Math.max(5.0, gap);
+    }
+
+    // Cat lane interpolation
+    const dx = state.laneTarget - cat.position.x;
+    cat.position.x += dx * Math.min(1, dt * LANE_SPEED);
+    cat.rotation.z = -dx * 0.18;
+
+    // Cat jumping
+    if (state.catY > 0 || state.catYVel > 0) {
+      state.catYVel += GRAVITY * dt;
+      state.catY += state.catYVel * dt;
+      if (state.catY < 0) { state.catY = 0; state.catYVel = 0; }
+    }
+    cat.position.y = state.catY;
+
+    // Slide visual
+    if (state.sliding) {
+      state.slideTimer -= dt;
+      cat.userData.model.scale.y = 0.45;
+      cat.userData.model.rotation.x = -0.6 + Math.PI; // wait, model already rotated PI
+      // Adjust: model rotation already has Math.PI on Y. Use scale only.
+      cat.userData.model.rotation.x = -0.6;
+      if (state.slideTimer <= 0) {
+        state.sliding = false;
+        cat.userData.model.scale.y = 1;
+        cat.userData.model.rotation.x = 0;
+      }
+    } else {
+      cat.userData.model.scale.y += (1 - cat.userData.model.scale.y) * Math.min(1, dt * 15);
+      cat.userData.model.rotation.x += (0 - cat.userData.model.rotation.x) * Math.min(1, dt * 15);
+    }
+
+    // Cat running animation
+    const runT = animTime * Math.max(12, state.speed * 1.6);
+    cat.userData.legs.forEach((leg, i) => {
+      leg.rotation.x = Math.sin(runT + i * Math.PI) * 0.85;
+    });
+    cat.userData.tail.rotation.z = Math.sin(runT * 0.6) * 0.35;
+    cat.position.y = state.catY + (state.sliding ? 0 : Math.abs(Math.sin(runT)) * 0.06);
+
+    // Dog animation
+    dog.position.x = cat.position.x * 0.35;
+    dog.position.z = 4 + Math.sin(animTime * 1.2) * 0.4;
+    dog.position.y = Math.abs(Math.sin(runT * 0.95)) * 0.18;
+    dog.userData.legs.forEach((leg, i) => {
+      leg.rotation.x = Math.sin(runT * 1.0 + i * Math.PI) * 1.0;
+    });
+    dog.userData.tail.rotation.z = Math.sin(animTime * 8) * 0.4;
+    dog.userData.tongue.rotation.x = Math.sin(animTime * 10) * 0.25;
+
+    // Random barks during play
+    if (state.runTime > state.nextBarkTime) {
+      sfxBark();
+      state.nextBarkTime = state.runTime + 7 + Math.random() * 6;
+    }
+
+    // Shadows
+    catShadow.position.x = cat.position.x;
+    catShadow.scale.setScalar(Math.max(0.4, 1 - state.catY * 0.18));
+    dogShadow.position.x = dog.position.x;
+    dogShadow.position.z = dog.position.z;
+    dogShadow.scale.setScalar(Math.max(0.7, 1 - dog.position.y * 0.3));
+
+    // Colisões
+    const hit = checkObstacleHit();
+    if (hit) {
+      if (state.powerActive || pupActive.cape > 0) {
+        // TURBO ou CAPA — destrói obstáculo sem perder vida
+        destroyObstacle(hit);
+      } else if (state.invulnTimer <= 0) {
+        // ❤️ PERDE 1 VIDA
+        state.lives -= 1;
+        updateHeartsHUD();
+        // Remove obstáculo que bateu (não bate de novo no mesmo)
+        const idx = obstacles.indexOf(hit);
+        if (idx >= 0) {
+          scene.remove(hit);
+          obstacles.splice(idx, 1);
+        }
+        sfxHit();
+        state.invulnTimer = INVULN_AFTER_HIT;
+        state.catBlinkTimer = 0;
+        if (state.lives <= 0) {
+          triggerGameOver();
+          return;
+        }
+      }
+    }
+    pickupBird();
+    pickupMilkBox();
+
+    // HUD
+    document.getElementById('score').textContent = Math.floor(state.score);
+    document.getElementById('bird-count').textContent = `🐦 ${state.birds}`;
+  }
+
+  // ============================================================
+  // GAME OVER
+  // ============================================================
+  function triggerGameOver() {
+    state.gameOver = true;
+    state.running = false;
+    sfxHit();
+    setTimeout(sfxBark, 200);
+    stopMusic();
+    stopThemeMusic();
+    // Salva mundos visitados nesta partida
+    saveThemesVisited(Array.from(state.visitedThisRun));
+
+    const lungeStart = dog.position.z;
+    const t0 = animTime;
+    function lunge() {
+      const t = (animTime - t0) / 0.7;
+      if (t >= 1) {
+        document.getElementById('final-score').textContent = Math.floor(state.score);
+        document.getElementById('final-birds').textContent = state.birds;
+        document.getElementById('final-level').textContent = state.level + 1;
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('game-over').classList.remove('hidden');
+
+        // ===== BOTÃO CONTINUAR — sempre aparece (uma vez por partida) =====
+        // Quando clicar: tenta mostrar rewarded ad. Se rolar ou não, continua.
+        const continueBtn = document.getElementById('continue-ad-btn');
+        if (!continueUsedThisRun) {
+          continueBtn.classList.remove('hidden');
+        } else {
+          continueBtn.classList.add('hidden');
+        }
+        return;
+      }
+      dog.position.z = lungeStart + (1.0 - lungeStart) * t;
+      requestAnimationFrame(lunge);
+    }
+    lunge();
+  }
+
+  // Após assistir rewarded — devolve o jogador ao jogo com folga de obstáculos
+  function grantContinue() {
+    // Esconde overlay e botão
+    document.getElementById('game-over').classList.add('hidden');
+    document.getElementById('continue-ad-btn').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+
+    // Limpa obstáculos perto do gato pra dar margem
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      if (obstacles[i].position.z > -10) {
+        scene.remove(obstacles[i]);
+        obstacles.splice(i, 1);
+      }
+    }
+
+    // Empurra o cachorro pra trás pra dar tempo de reagir
+    dog.position.set(0, 0, 6);
+
+    // Reseta estado do gato pra pista do meio
+    state.laneIndex = 1;
+    state.laneTarget = 0;
+    state.catY = 0;
+    state.catYVel = 0;
+    state.sliding = false;
+    state.gameOver = false;
+    state.running = true;
+    // Restaura 3 vidas e invuln pra dar fôlego
+    state.lives = 3;
+    state.invulnTimer = 2.0;
+    cat.visible = true;
+    updateHeartsHUD();
+
+    startMusic();
+    playThemeMusic(activeTheme.id);
+  }
+
+  // ============================================================
+  // START / RESTART
+  // ============================================================
+  let continueUsedThisRun = false;
+  let sessionAdShown = false;  // se já mostrou ad nesta sessão da página
+
+  // Tenta mostrar um preroll ad. Se rolar, OK; se não, segue o jogo.
+  // SEMPRE mostra o overlay de loading pra dar feedback visual
+  function tryPrerollThenStart() {
+    if (sessionAdShown) {
+      // já mostrou ad nesta sessão — pula
+      startGame();
+      return;
+    }
+    sessionAdShown = true;
+    // Mostra overlay imediatamente — o player sabe que algo tá acontecendo
+    showAdLoadingOverlay(t('loading_ad') || '⏳ carregando anúncio...');
+    let resolved = false;
+    const proceed = () => {
+      if (resolved) return;
+      resolved = true;
+      hideAdLoadingOverlay();
+      startGame();
+    };
+    try {
+      adBreak({
+        type: 'preroll',
+        name: 'first_play_session',
+        beforeAd: () => {
+          // SDK começou ad real — esconde nosso overlay
+          hideAdLoadingOverlay();
+          if (audioCtx) audioCtx.suspend().catch(() => {});
+        },
+        afterAd:  () => { if (audioCtx) audioCtx.resume().catch(() => {}); },
+        adBreakDone: proceed,
+      });
+      // Fallback se SDK não responder em 4s
+      setTimeout(proceed, 4000);
+    } catch (e) {
+      console.warn('[Ads] preroll falhou:', e);
+      proceed();
+    }
+  }
+
+  // Voltar pro menu COM AD (a cada game over, o player vê ad antes de trocar setup)
+  function backToMenuWithAd() {
+    showAdLoadingOverlay(t('loading_ad') || '⏳ carregando anúncio...');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      hideAdLoadingOverlay();
+      backToMenu();
+    };
+    try {
+      adBreak({
+        type: 'next',
+        name: 'back_to_menu',
+        beforeAd: () => {
+          hideAdLoadingOverlay();
+          stopMusic();
+          if (audioCtx) audioCtx.suspend().catch(() => {});
+        },
+        afterAd:  () => { if (audioCtx) audioCtx.resume().catch(() => {}); },
+        adBreakDone: finish,
+      });
+      setTimeout(finish, 4000);
+    } catch (e) {
+      finish();
+    }
+  }
+
+  function startGame() {
+    ensureAudio();
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-over').classList.add('hidden');
+    document.getElementById('continue-ad-btn').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+
+    continueUsedThisRun = false;
+
+    // Reembaralha a ordem dos temas pra essa partida
+    state.themeOrder = shuffleThemeOrder(state.lastThemeId);
+    const startThemeIdx = state.themeOrder[0];
+
+    state.running = true; state.gameOver = false;
+    state.baseSpeed = BASE_SPEED;
+    state.speed = BASE_SPEED; state.score = 0; state.birds = 0;
+    state.catY = 0; state.catYVel = 0;
+    state.sliding = false; state.slideTimer = 0;
+    state.laneIndex = 1; state.laneTarget = 0;
+    state.nextSpawnZ = -22; state.runTime = 0;
+    state.level = 0; state.nextBarkTime = 4;
+    state.lastLevelTime = 0;
+    state.spawnMilkBoxNext = false;
+    state.lives = MAX_LIVES;
+    state.invulnTimer = 0;
+    state.catBlinkTimer = 0;
+    state.visitedThisRun = new Set();
+    cat.visible = true;
+    deactivateTurbo();
+    if (catAura) {
+      catAura.userData.auraInner.material.opacity = 0;
+      catAura.userData.auraOuter.material.opacity = 0;
+    }
+
+    cat.position.set(0, 0, 0);
+    cat.userData.model.scale.y = 1;
+    cat.userData.model.rotation.x = 0;
+    cat.rotation.set(0, 0, 0);
+    rebuildCatWithSkin();  // aplica skin selecionada
+    cat.position.set(0, 0, 0);
+    dog.position.set(0, 0, 4);
+
+    obstacles.forEach(o => scene.remove(o)); obstacles.length = 0;
+    birds.forEach(b => scene.remove(b)); birds.length = 0;
+    milkBoxes.forEach(m => scene.remove(m)); milkBoxes.length = 0;
+    destroyingObstacles.forEach(o => scene.remove(o)); destroyingObstacles.length = 0;
+    enemies.forEach(e => scene.remove(e)); enemies.length = 0;
+    projectiles.forEach(p => scene.remove(p)); projectiles.length = 0;
+    hearts.forEach(h => scene.remove(h)); hearts.length = 0;
+    claws.forEach(c => scene.remove(c)); claws.length = 0;
+    guards.forEach(g => scene.remove(g)); guards.length = 0;
+    bullets.forEach(b => scene.remove(b)); bullets.length = 0;
+    state.nextEnemyAt = state.runTime + 18;
+    state.clawActive = false;
+    state.clawTimer = 0;
+    state.nextClawAt = state.runTime + 25;
+    state.nextGuardAt = 0;
+    document.body.classList.remove('claw-mode');
+    const clawBar = document.getElementById('claw-bar');
+    if (clawBar) clawBar.classList.remove('active');
+
+    // Reset powerups por partida
+    for (const id of ['cape','ribbon','laser']) {
+      pupCooldown[id] = 0;
+      pupActive[id] = 0;
+    }
+    deactivateCape(); deactivateLaser(); deactivateRibbon();
+    refreshPupHud();
+
+    updateHeartsHUD();
+    applyTheme(startThemeIdx, true);
+    spawnRow();
+    state.nextSpawnZ -= 6;
+    spawnRow();
+
+    showLevelBanner(startThemeIdx);
+    startMusic();
+  }
+
+  // Wrapper de restart: tenta mostrar intersticial a cada N mortes ANTES do restart
+  function restartGameWithAd() {
+    // O SDK do AdSense for Games sabe quando deve realmente exibir.
+    // beforeAd/afterAd cuidam de pausar/retomar áudio. Depois disso, start.
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      startGame();
+    };
+
+    // Tenta o intersticial. Se rolar, beforeAd/afterAd disparam; start vai pro
+    // adBreakDone. Se NÃO rolar (filtrado pelo SDK), também cai no adBreakDone.
+    gameOverCount++;
+    if (gameOverCount % INTERSTITIAL_FREQUENCY === 0) {
+      try {
+        adBreak({
+          type: 'next',
+          name: 'between_runs',
+          beforeAd: () => { stopMusic(); if (audioCtx) audioCtx.suspend().catch(() => {}); },
+          afterAd:  () => { if (audioCtx) audioCtx.resume().catch(() => {}); },
+          adBreakDone: () => start(),
+        });
+        // fallback de segurança se o SDK não responder em 3s
+        setTimeout(start, 3000);
+      } catch (e) {
+        start();
+      }
+    } else {
+      start();
+    }
+  }
+
+  // Volta pro menu pra trocar gato/powerup/idioma
+  function backToMenu() {
+    document.getElementById('game-over').classList.add('hidden');
+    // Limpa estado de jogo
+    stopMusic();
+    state.running = false;
+    // Reseta câmera + posição do gato pra exibição no menu
+    if (cat) {
+      cat.position.set(0, 0, 0);
+      cat.rotation.set(0, 0, 0);
+    }
+    camera.position.set(0, 7, 10);
+    camera.lookAt(0, 1, -3);
+    // Mostra o menu
+    document.getElementById('start-screen').classList.remove('hidden');
+    refreshWorldsRow();
+    refreshSkinSelector();
+    refreshPowerupShop();
+  }
+
+  // start-btn = começa o jogo
+  document.getElementById('start-btn').addEventListener('click', () => tryPrerollThenStart());
+  document.getElementById('start-btn').addEventListener('touchend', e => { e.preventDefault(); tryPrerollThenStart(); });
+
+  document.getElementById('restart-btn').addEventListener('click', restartGameWithAd);
+  document.getElementById('restart-btn').addEventListener('touchend', e => { e.preventDefault(); restartGameWithAd(); });
+  document.getElementById('menu-btn').addEventListener('click', backToMenuWithAd);
+  document.getElementById('menu-btn').addEventListener('touchend', e => { e.preventDefault(); backToMenuWithAd(); });
+  document.getElementById('continue-ad-btn').addEventListener('click', tryRewardedAndContinue);
+  document.getElementById('continue-ad-btn').addEventListener('touchend', e => { e.preventDefault(); tryRewardedAndContinue(); });
+  document.getElementById('mute-btn').addEventListener('click', () => { ensureAudio(); toggleMute(); });
+
+  // Inicializa o SDK do AdSense for Games (faz uma vez no carregamento)
+  initAds();
+
+  // ============================================================
+  // RESIZE
+  // ============================================================
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // ============================================================
+  // INTRO ANIMATION (cat fleeing from dog, cinematic camera)
+  // ============================================================
+  function playIntroAnimation() {
+    state.introPlaying = true;
+    // Aplica cenário do BRASIL pra intro (Beto é gato brasileiro!)
+    const brasilIdx = THEMES.findIndex(t => t.id === 'brasil');
+    applyTheme(brasilIdx, true);
+    currentMelodyId = 'brasil';
+    // Posiciona personagens — gato no meio, cachorro atrás
+    cat.position.set(0, 0, 0);
+    cat.rotation.set(0, 0, 0);
+    dog.position.set(0, 0, 5);
+
+    const startTime = animTime;
+    const introDuration = 3.2;
+    let barkPlayed = false;
+    let meowPlayed = false;
+
+    function step() {
+      const t = Math.min(1, (animTime - startTime) / introDuration);
+
+      // 3 fases da intro:
+      //  0.0–0.35  close-up rotacionando no rosto do Beto (apresentação)
+      //  0.35–0.7  zoom out + cachorro aparece latindo
+      //  0.7–1.0   câmera vai pra posição final (atrás do gato)
+      if (t < 0.35) {
+        // Close-up no gato girando — mostra o personagem em destaque
+        const localT = t / 0.35;
+        const angle = localT * Math.PI * 1.2;
+        const r = 3.5 - localT * 0.5;
+        camera.position.set(
+          Math.sin(angle) * r,
+          1.2 + localT * 0.6,
+          Math.cos(angle) * r - 1.0
+        );
+        camera.lookAt(0, 1.0, 0);
+        // Gato saca a câmera ("acena" balançando o rabo)
+        cat.userData.tail.rotation.z = Math.sin(animTime * 6) * 0.6;
+        cat.userData.legs.forEach((leg, i) => {
+          leg.rotation.x = Math.sin(animTime * 4 + i) * 0.15;
+        });
+        // Pequeno meow no início
+        if (!meowPlayed && t > 0.05) {
+          meowPlayed = true;
+          if (audioCtx) {
+            try {
+              playNote(900, audioCtx.currentTime, 0.12, 'triangle', 0.06);
+              playNote(720, audioCtx.currentTime + 0.13, 0.18, 'triangle', 0.05);
+            } catch (e) {}
+          }
+        }
+      } else if (t < 0.7) {
+        // Zoom out — câmera se afasta + cachorro entra latindo
+        const localT = (t - 0.35) / 0.35;
+        const ease = 1 - Math.pow(1 - localT, 2);
+        // Câmera vai de lateral pra trás
+        camera.position.set(
+          (1 - ease) * 3.5 + ease * 4,
+          1.8 + ease * 2.5,
+          -1.0 + ease * 7
+        );
+        camera.lookAt(0, 1.0, 1.5 - ease * 2);
+        // Personagens correndo
+        const runT = animTime * 16;
+        cat.userData.legs.forEach((leg, i) => {
+          leg.rotation.x = Math.sin(runT + i * Math.PI) * 0.7;
+        });
+        dog.userData.legs.forEach((leg, i) => {
+          leg.rotation.x = Math.sin(runT + i * Math.PI) * 0.9;
+        });
+        cat.userData.tail.rotation.z = Math.sin(runT * 0.6) * 0.4;
+        dog.userData.tail.rotation.z = Math.sin(animTime * 8) * 0.5;
+        cat.position.y = Math.abs(Math.sin(runT)) * 0.1;
+        dog.position.y = Math.abs(Math.sin(runT * 0.95)) * 0.2;
+        // Bark do cachorro entrando
+        if (!barkPlayed && t > 0.45) {
+          sfxBark();
+          barkPlayed = true;
+        }
+      } else {
+        // Pose final — câmera atrás (posição de jogo)
+        const localT = (t - 0.7) / 0.3;
+        const ease = 1 - Math.pow(1 - localT, 3);
+        const startPos = { x: 4, y: 4.3, z: 6 };
+        const endPos = { x: 0, y: 7, z: 10 };
+        camera.position.set(
+          startPos.x + (endPos.x - startPos.x) * ease,
+          startPos.y + (endPos.y - startPos.y) * ease,
+          startPos.z + (endPos.z - startPos.z) * ease
+        );
+        camera.lookAt(0, 1, -3);
+        // Continua animação de corrida
+        const runT = animTime * 16;
+        cat.userData.legs.forEach((leg, i) => {
+          leg.rotation.x = Math.sin(runT + i * Math.PI) * 0.85;
+        });
+        dog.userData.legs.forEach((leg, i) => {
+          leg.rotation.x = Math.sin(runT + i * Math.PI) * 1.0;
+        });
+        cat.userData.tail.rotation.z = Math.sin(runT * 0.6) * 0.35;
+        dog.userData.tail.rotation.z = Math.sin(animTime * 8) * 0.4;
+        cat.position.y = Math.abs(Math.sin(runT)) * 0.08;
+        dog.position.y = Math.abs(Math.sin(runT * 0.95)) * 0.18;
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        state.introPlaying = false;
+        camera.position.set(0, 7, 10);
+        camera.lookAt(0, 1, -3);
+        document.getElementById('start-screen').classList.remove('hidden');
+        refreshWorldsRow();
+        refreshSkinSelector();
+        refreshPowerupShop();
+      }
+    }
+    step();
+  }
+
+  function refreshWorldsRow() {
+    const visited = loadThemesVisited();
+    const row = document.getElementById('worlds-row');
+    if (!row) return;
+    row.innerHTML = THEMES.map(t => {
+      const isVisited = visited.includes(t.id);
+      return `<span class="world-chip${isVisited ? '' : ' locked'}">
+        <span class="flag">${t.flag}</span>${isVisited ? tTheme(t.id) : '???'}
+      </span>`;
+    }).join('');
+  }
+
+  function refreshSkinSelector() {
+    const row = document.getElementById('skin-selector');
+    if (!row) return;
+    const selected = getSelectedSkin();
+    const unlocked = getUnlockedSkins();
+    row.innerHTML = '';
+    for (const [id, skin] of Object.entries(CAT_SKINS)) {
+      const isSelected = id === selected;
+      const isUnlocked = unlocked.has(id);
+      const div = document.createElement('div');
+      div.className = 'skin-circle'
+        + (isSelected ? ' selected' : '')
+        + (isUnlocked ? '' : ' locked');
+      // Fundo com a cor da skin
+      const hex = '#' + skin.main.toString(16).padStart(6, '0');
+      div.style.background = hex;
+      div.innerHTML = '🐱';
+      div.addEventListener('click', () => onSkinClick(id));
+      div.addEventListener('touchend', e => { e.preventDefault(); onSkinClick(id); });
+      row.appendChild(div);
+    }
+    document.getElementById('skin-name').textContent =
+      `${CAT_SKINS[selected].name} · ${tSkinColor(selected)}`;
+  }
+
+  function onSkinClick(id) {
+    const unlocked = getUnlockedSkins();
+    if (unlocked.has(id)) {
+      // Já desbloqueado — seleciona
+      setSelectedSkin(id);
+      refreshSkinSelector();
+    } else {
+      // Bloqueado — pede ad pra desbloquear
+      tryUnlockSkinViaAd(id);
+    }
+  }
+
+  // Mostra rewarded ad pra desbloquear skin. Se ad não rolar, desbloqueia
+  // mesmo assim depois de 3s (pra não travar o jogador no modo teste).
+  function tryUnlockSkinViaAd(id) {
+    document.getElementById('skin-name').textContent = '⏳ carregando anúncio...';
+    let granted = false;
+    const finish = (success) => {
+      if (granted) return;
+      granted = true;
+      if (success) {
+        unlockSkin(id);
+        setSelectedSkin(id);
+      }
+      refreshSkinSelector();
+    };
+    try {
+      adBreak({
+        type: 'reward',
+        name: 'unlock_skin_' + id,
+        beforeReward: (showAdFn) => {
+          try { showAdFn(); } catch (e) { finish(true); }
+        },
+        adViewed:    () => finish(true),
+        adDismissed: () => finish(false),
+        adBreakDone: () => finish(true),  // libera mesmo se SDK encerrou sem ad
+        beforeAd: () => { if (audioCtx) audioCtx.suspend().catch(() => {}); },
+        afterAd:  () => { if (audioCtx) audioCtx.resume().catch(() => {}); },
+      });
+      // Fallback: se SDK não responder, libera em 3s
+      setTimeout(() => finish(true), 3000);
+    } catch (e) {
+      finish(true);
+    }
+  }
+
+  // ============================================================
+  // BOOT SEQUENCE
+  // ============================================================
+  animate(); // start render loop immediately
+
+  // Lang picker listeners
+  document.querySelectorAll('#lang-picker .lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.lang;
+      setLang(lang);
+      document.getElementById('lang-picker').classList.add('hidden');
+    });
+  });
+  // Botão de trocar idioma no menu (cicla pt -> en -> es -> pt)
+  document.getElementById('lang-toggle').addEventListener('click', () => {
+    const order = ['pt', 'en', 'es'];
+    const idx = order.indexOf(currentLang);
+    const next = order[(idx + 1) % order.length];
+    setLang(next);
+  });
+
+  // Loja de power-ups — clica no card pra equipar (ou desbloquear com ad)
+  document.querySelectorAll('#powerup-shop .pup-card').forEach(card => {
+    const handler = (e) => {
+      e.stopPropagation();
+      const id = card.dataset.pup;
+      onPupCardClick(id);
+    };
+    card.addEventListener('click', handler);
+    card.addEventListener('touchend', e => { e.preventDefault(); handler(e); });
+  });
+  // HUD em jogo — botões pra ativar
+  document.querySelectorAll('#pup-hud .pup-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.pup;
+      activatePup(id);
+    });
+  });
+
+  // Aplica idioma carregado (caso já tenha escolhido antes)
+  applyLanguage();
+
+  // Se ainda não escolheu idioma, mostra o picker (depois do splash)
+  const needsLangPick = !getLang();
+
+  // TZ Studios splash plays via CSS animation. After 3s, hide & start intro.
+  setTimeout(() => {
+    document.getElementById('wolf-splash').classList.add('done');
+    if (needsLangPick) {
+      document.getElementById('lang-picker').classList.remove('hidden');
+      // Quando escolher, segue pra intro
+      document.querySelectorAll('#lang-picker .lang-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          setTimeout(playIntroAnimation, 200);
+        }, { once: true });
+      });
+    } else {
+      playIntroAnimation();
+    }
+  }, 3000);
+
+})();
+</script>
+</body>
+</html>
