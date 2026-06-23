@@ -39,6 +39,15 @@ jobs:
             sed -i "s/targetSdkVersion = [0-9]*/targetSdkVersion = 35/" "$V"
             cat "$V"
           fi
+      - name: Bump versionCode
+        run: |
+          BUILD_GRADLE=android/app/build.gradle
+          if [ -f "$BUILD_GRADLE" ]; then
+            # Usa o número do run do GitHub como versionCode (sempre incrementa)
+            sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/" "$BUILD_GRADLE"
+            sed -i "s/versionName \"[^\"]*\"/versionName \"1.0.${{ github.run_number }}\"/" "$BUILD_GRADLE"
+            grep -E "versionCode|versionName" "$BUILD_GRADLE"
+          fi
       - name: Decode keystore
         env:
           KS_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
