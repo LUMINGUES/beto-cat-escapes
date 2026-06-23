@@ -30,6 +30,9 @@ jobs:
     - name: Atualiza targetSdk para 35
       run: "V=android/variables.gradle\nif [ -f \"$V\" ]; then\n  sed -i \"s/compileSdkVersion = .*/compileSdkVersion = 35/\" \"$V\"\n  sed -i \"s/targetSdkVersion = .*/targetSdkVersion = 35/\" \"$V\"\n\
         \  cat \"$V\"\nfi"
+    - name: Atualiza targetSdk para 35
+      run: "V=android/variables.gradle\nif [ -f \"$V\" ]; then\n  sed -i \"s/compileSdkVersion = .*/compileSdkVersion = 35/\" \"$V\"\n  sed -i \"s/targetSdkVersion = .*/targetSdkVersion = 35/\" \"$V\"\n\
+        \  cat \"$V\"\nfi"
     - name: Decode keystore
       env:
         KS_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
