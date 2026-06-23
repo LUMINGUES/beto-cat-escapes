@@ -1,4 +1,4 @@
-name: Build Android APK + AAB
+name: Build Android APK + AAB (assinado)
 
 on:
   push:
@@ -31,10 +31,43 @@ jobs:
             sed -i '/<\/application>/i\        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-6497152814228418~7528960636"/>' "$MANIFEST"
           fi
       - run: npx cap sync android
+      - name: Configura assinatura release
+        env:
+          KS_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PW: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::Secret SIGNING_KEYSTORE_BASE64 nao configurado!"
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/release.keystore
+          echo "Keystore decodificada"
+          # Injeta signingConfig DENTRO do bloco android existente
+          GRADLE_FILE="android/app/build.gradle"
+          # Insere signingConfig logo após "android {"
+          sed -i "/^android {/a\\
+    signingConfigs {\\
+        release {\\
+            storeFile file('release.keystore')\\
+            storePassword '$STORE_PW'\\
+            keyAlias '$KEY_ALIAS'\\
+            keyPassword '$KEY_PW'\\
+        }\\
+    }" "$GRADLE_FILE"
+          # Habilita assinatura no buildType release
+          sed -i "/buildTypes {/,/}/{ /release {/a\\
+            signingConfig signingConfigs.release
+          }" "$GRADLE_FILE"
+          echo "=== build.gradle modificado ==="
+          cat "$GRADLE_FILE"
       - name: Build Debug APK
         run: cd android && chmod +x ./gradlew && ./gradlew assembleDebug --no-daemon
-      - name: Build Release AAB
+      - name: Build Release AAB ASSINADO
         run: cd android && ./gradlew bundleRelease --no-daemon
+      - name: Build Release APK ASSINADO
+        run: cd android && ./gradlew assembleRelease --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
@@ -43,3 +76,7 @@ jobs:
         with:
           name: app-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
