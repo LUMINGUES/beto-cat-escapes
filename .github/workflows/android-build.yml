@@ -31,6 +31,23 @@ jobs:
             sed -i "/<\/application>/i\        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"ca-app-pub-6497152814228418~7528960636\"/>" "$M"
           fi
       - run: npx cap sync android
+      - name: Instala capacitor/assets
+        run: npm install --save-dev @capacitor/assets
+
+      - name: Gera icones e splash do PNG
+        run: |
+          if [ -f resources/icon.png ]; then
+            npx @capacitor/assets generate --android \
+              --iconBackgroundColor "#FFD700" \
+              --iconBackgroundColorDark "#1a4d8c" \
+              --splashBackgroundColor "#1a4d8c" \
+              --splashBackgroundColorDark "#1a4d8c" || echo "Geracao com avisos, continuando"
+            echo "=== Icones gerados ==="
+            find android/app/src/main/res -name "ic_launcher*" | head -10
+          else
+            echo "icon.png nao encontrado em resources/"
+          fi
+
       - name: Atualiza para API 35
         run: |
           V=android/variables.gradle
