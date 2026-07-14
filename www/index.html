@@ -1332,7 +1332,7 @@
 
   // Mostrar intersticial a cada N mortes. Com 7 vidas, morte é raro,
   // então deixamos a cada 2 (não a cada 3) — vidas já são o "buffer"
-  const INTERSTITIAL_FREQUENCY = 2;
+  const INTERSTITIAL_FREQUENCY = 1;  // ad todo restart (a cada 1 partida)
 
   let gameOverCount = 0;
   let adsReady = false;
@@ -1400,43 +1400,14 @@
   // Overlay de "carregando ad" — sempre visível pra dar feedback
   let adOverlayCountdownTimer = null;
   function showAdLoadingOverlay(msg) {
-    // ⏸️ Pausa o jogo + música enquanto carrega anúncio
+    // ⏸️ Pausa o jogo + música silenciosamente enquanto carrega anúncio
+    // (sem popup visível — o proprio anuncio do AdMob toma a tela)
     if (typeof state !== 'undefined') state.adPaused = true;
     try { stopMusic(); } catch (e) {}
     try { if (audioCtx) audioCtx.suspend().catch(() => {}); } catch (e) {}
-    let ov = document.getElementById('ad-loading-overlay');
-    if (!ov) {
-      ov = document.createElement('div');
-      ov.id = 'ad-loading-overlay';
-      ov.innerHTML = `
-        <div class="ad-load-box">
-          <div class="ad-load-spinner"></div>
-          <div class="ad-load-msg">⏳ carregando anúncio...</div>
-          <div class="ad-load-sub">aguarde alguns segundos</div>
-          <div class="ad-load-countdown" id="ad-countdown">4</div>
-        </div>`;
-      document.body.appendChild(ov);
-    } else {
-      const m = ov.querySelector('.ad-load-msg');
-      if (m) m.textContent = msg || '⏳ carregando anúncio...';
-    }
-    ov.classList.remove('hidden');
-    // Countdown visual: 4 → 3 → 2 → 1
-    let cnt = 4;
-    const cdEl = document.getElementById('ad-countdown');
-    if (cdEl) cdEl.textContent = cnt;
-    if (adOverlayCountdownTimer) clearInterval(adOverlayCountdownTimer);
-    adOverlayCountdownTimer = setInterval(() => {
-      cnt--;
-      if (cdEl) cdEl.textContent = cnt > 0 ? cnt : '✓';
-      if (cnt <= 0 && adOverlayCountdownTimer) {
-        clearInterval(adOverlayCountdownTimer);
-        adOverlayCountdownTimer = null;
-      }
-    }, 1000);
   }
   function hideAdLoadingOverlay() {
-    // ▶️ Fecha overlay do ad
+    // ▶️ Fecha o pause do ad
     if (typeof state !== 'undefined') state.adPaused = false;
     try { if (audioCtx) audioCtx.resume().catch(() => {}); } catch (e) {}
     const ov = document.getElementById('ad-loading-overlay');
