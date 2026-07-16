@@ -439,6 +439,91 @@
     to { opacity: 1; }
   }
 
+  /* ═══ TUTORIAL ═══ */
+  #tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 30, 60, 0.7);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(3px);
+    animation: ttp-fade-in 0.25s ease-out;
+  }
+  #tutorial-overlay.hidden { display: none; }
+  .tut-card {
+    background: linear-gradient(180deg, #1e5a9f 0%, #0d3b6e 100%);
+    border: 3px solid #FFD700;
+    border-radius: 20px;
+    padding: 24px 28px;
+    max-width: 340px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 2px 8px rgba(255,255,255,0.15);
+    text-align: center;
+    color: white;
+  }
+  .tut-icon {
+    font-size: 72px;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+    animation: tut-bounce 1.4s ease-in-out infinite;
+  }
+  @keyframes tut-bounce {
+    0%,100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-8px) scale(1.05); }
+  }
+  .tut-title {
+    font-family: 'Bungee', sans-serif;
+    font-size: 22px;
+    color: #FFD700;
+    text-shadow: 2px 2px 0 #0a2a50;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+  .tut-text {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    color: #E8F4FF;
+    margin-bottom: 20px;
+  }
+  .tut-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .tut-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .tut-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+  }
+  .tut-dot.active { background: #FFD700; }
+  .tut-next {
+    background: #FFD700;
+    color: #0d3b6e;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-family: 'Bungee', sans-serif;
+    font-size: 14px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #B8990D, 0 6px 12px rgba(0,0,0,0.3);
+    transition: transform 0.05s;
+  }
+  .tut-next:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #B8990D, 0 3px 6px rgba(0,0,0,0.3);
+  }
+
   /* ======= LEVEL BANNER ======= */
   #level-banner {
     position: fixed;
@@ -1223,6 +1308,19 @@
     <div class="ttp-text">TOQUE PARA JOGAR</div>
   </div>
 
+  <!-- TUTORIAL — sequência de dicas com o jogo pausado atrás -->
+  <div id="tutorial-overlay" class="hidden">
+    <div class="tut-card">
+      <div class="tut-icon" id="tut-icon">👆</div>
+      <div class="tut-title" id="tut-title">DESLIZA PRA MOVER</div>
+      <div class="tut-text" id="tut-text">Arrasta o dedo pros LADOS pra trocar de pista.<br>Deslize pra CIMA pra pular, pra BAIXO pra deslizar.</div>
+      <div class="tut-nav">
+        <div class="tut-dots" id="tut-dots"></div>
+        <button class="tut-next" id="tut-next">PRÓXIMO ▶</button>
+      </div>
+    </div>
+  </div>
+
   <!-- AUDIO POR TEMA — coloque seus MP3 em ./musics/ pra eles tocarem -->
   <audio id="audio-egito"   loop preload="none" src="musics/egito.mp3"></audio>
   <audio id="audio-china"   loop preload="none" src="musics/china.mp3"></audio>
@@ -1278,6 +1376,7 @@
 
     <div id="worlds-row"></div>
     <button class="play-btn" id="start-btn">JOGAR</button>
+    <button class="play-btn secondary" id="tutorial-btn" style="margin-top:8px;">📖 TUTORIAL</button>
     <div class="controls-hint">
       <div>❤️ 7 vidas</div>
       <div>🥛 turbo</div>
@@ -1711,14 +1810,186 @@
   function playHat(when)   { playNote(8000, when, 0.02, 'square',  0.025); }
 
   function startMusic() {
-    if (!audioCtx || musicPlaying) return;
-    musicPlaying = true;
-    musicNextStart = audioCtx.currentTime + 0.05;
-    scheduleMusic();
+    // 🎵 Toca APENAS MP3s da pasta musics/ (playlist aleatória embaralhada)
+    // Sem sintetizador de fallback — se a lista tiver vazia, silêncio.
+    tryStartMp3Playlist();
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // 🎵 SISTEMA DE MÚSICAS MP3 (auto-detecta arquivos na pasta)
+  // ═══════════════════════════════════════════════════════════
+  //
+  // COMO USAR:
+  // 1. Coloque QUANTOS MP3s quiser na mesma pasta que o index.html (www/)
+  // 2. É SÓ ISSO! O jogo detecta automaticamente e toca.
+  //
+  // O sistema tenta nomes comuns (song1.mp3, song2.mp3, track1.mp3, etc)
+  // e também qualquer arquivo listado em MP3_HINTS abaixo (opcional).
+  // Qualquer MP3 que carregar entra na playlist.
+  //
+  // Não precisa listar nome. Só joga o MP3 na pasta e roda.
+  //
+
+  // Padrões de nomes que o jogo tenta detectar automaticamente:
+  // song1.mp3, song2.mp3, ... song30.mp3
+  // track1.mp3, track2.mp3, ... track30.mp3
+  // music1.mp3, music2.mp3, ... music30.mp3
+  // musica1.mp3, musica2.mp3, ... musica30.mp3
+  // tema1.mp3, tema2.mp3, ... tema30.mp3
+  // 1.mp3, 2.mp3, ... 30.mp3
+  //
+  // Se seus arquivos têm nomes CUSTOMIZADOS, adicione aqui:
+  const MP3_HINTS = [
+    // 'minha-musica-favorita.mp3',
+    // 'batida-forte.mp3',
+    // (deixe vazio se seus MP3s seguirem os padrões acima)
+  ];
+
+  // Lista final descoberta em runtime
+  let MP3_PLAYLIST = [];
+  let mp3Discovered = false;
+
+  // Gera lista de nomes candidatos a testar
+  function buildMp3Candidates() {
+    const prefixes = ['song', 'track', 'music', 'musica', 'tema', 'bg', 'gameplay', ''];
+    const list = [];
+    for (const p of prefixes) {
+      for (let i = 1; i <= 30; i++) {
+        list.push(p + i + '.mp3');
+      }
+    }
+    return [...new Set([...MP3_HINTS, ...list])];
+  }
+
+  // Testa cada candidato via HEAD; os que existirem entram na playlist
+  async function discoverMp3Files() {
+    if (mp3Discovered) return;
+    mp3Discovered = true;
+    const candidates = buildMp3Candidates();
+    const found = [];
+    // Testa em paralelo (batches de 6 pra não sobrecarregar)
+    for (let i = 0; i < candidates.length; i += 6) {
+      const batch = candidates.slice(i, i + 6);
+      const results = await Promise.all(batch.map(async name => {
+        try {
+          const resp = await fetch(name, { method: 'HEAD' });
+          return resp.ok ? name : null;
+        } catch (e) { return null; }
+      }));
+      results.forEach(r => { if (r) found.push(r); });
+    }
+    MP3_PLAYLIST = found;
+    console.log('[MP3] descobertas ' + found.length + ' faixas:', found);
+    // Se estava esperando pra tocar, começa agora
+    if (musicPlaying && found.length > 0 && !mp3Player) {
+      tryStartMp3Playlist();
+    }
+  }
+  // Dispara descoberta ao carregar a página
+  setTimeout(discoverMp3Files, 100);
+
+  let mp3Player = null;
+  let mp3Playing = false;
+  let mp3ShuffleQueue = [];
+  let mp3LastIndex = -1;
+
+  function tryStartMp3Playlist() {
+    if (mp3Playing && mp3Player) return true;
+    if (!MP3_PLAYLIST || MP3_PLAYLIST.length === 0) {
+      // Se ainda não descobriu, marca que tem que começar quando descobrir
+      musicPlaying = true;
+      return false;
+    }
+
+    if (!mp3Player) {
+      mp3Player = document.createElement('audio');
+      mp3Player.id = 'mp3-playlist';
+      mp3Player.preload = 'auto';
+      document.body.appendChild(mp3Player);
+      mp3Player.addEventListener('ended', () => {
+        if (mp3Playing) playNextMp3();
+      });
+      mp3Player.addEventListener('error', () => {
+        console.warn('[MP3] falhou:', mp3Player.src, '— tentando próxima');
+        if (mp3Playing && MP3_PLAYLIST.length > 1) playNextMp3();
+      });
+    }
+    mp3Player.muted = muted;
+    mp3Player.volume = 0.55;
+    mp3Playing = true;
+    musicPlaying = true;
+    playNextMp3();
+    return true;
+  }
+
+  function playNextMp3() {
+    if (!MP3_PLAYLIST.length) return;
+    if (mp3ShuffleQueue.length === 0) {
+      mp3ShuffleQueue = MP3_PLAYLIST.slice();
+      for (let i = mp3ShuffleQueue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [mp3ShuffleQueue[i], mp3ShuffleQueue[j]] = [mp3ShuffleQueue[j], mp3ShuffleQueue[i]];
+      }
+      if (MP3_PLAYLIST.length > 1 && mp3ShuffleQueue[0] === MP3_PLAYLIST[mp3LastIndex]) {
+        const swap = Math.floor(1 + Math.random() * (mp3ShuffleQueue.length - 1));
+        [mp3ShuffleQueue[0], mp3ShuffleQueue[swap]] = [mp3ShuffleQueue[swap], mp3ShuffleQueue[0]];
+      }
+    }
+    const next = mp3ShuffleQueue.shift();
+    mp3LastIndex = MP3_PLAYLIST.indexOf(next);
+    mp3Player.src = next;
+    mp3Player.play().catch(err => {
+      console.warn('[MP3] play() falhou:', err);
+    });
+  }
+
+  function stopMp3Playlist() {
+    mp3Playing = false;
+    if (mp3Player) {
+      try { mp3Player.pause(); } catch (e) {}
+    }
+  }
+  function updateMp3Mute() {
+    if (mp3Player) mp3Player.muted = muted;
+  }
+  let musicLoopCount = 0;
+
+  // Cria variação pra evitar enjoo: transpõe, muda oitava, embaralha bateria
+  function makeVariedMelody(base, variant) {
+    const clone = Object.assign({}, base);
+    // 0: original
+    // 1: transpõe +2 semitons (multiplica por 1.122)
+    // 2: transpõe -3 semitons (multiplica por 0.891)
+    // 3: sobe uma oitava o lead
+    // 4: dobra bateria mas mais leve
+    const shift = variant === 1 ? 1.122 : variant === 2 ? 0.891 : variant === 3 ? 2 : 1;
+    if (shift !== 1) {
+      clone.lead = base.lead ? base.lead.map(n => n > 0 ? n * shift : 0) : null;
+      if (variant !== 3) clone.harmony = base.harmony ? base.harmony.map(n => n > 0 ? n * shift : 0) : null;
+    }
+    if (variant === 4) {
+      // Padrão de bateria com mais hats e syncopa
+      const N = base.length;
+      clone.hats = [];
+      for (let i = 0; i < N; i += 2) clone.hats.push(i);
+      clone.snares = base.snares ? base.snares.map(b => (b + 1) % N) : null;
+    }
+    if (variant === 5) {
+      // Padrão minimalista (só kick + hat suave)
+      clone.snares = [];
+      clone.hats = base.hats ? base.hats.filter((_, i) => i % 2 === 0) : null;
+      clone.harmony = null;  // sem harmonia = mais espaço
+    }
+    return clone;
+  }
+
   function scheduleMusic() {
     if (!musicPlaying || !audioCtx) return;
-    const m = MELODIES[currentMelodyId] || MELODIES.egito;
+    const baseMelody = MELODIES[currentMelodyId] || MELODIES.egito;
+    // Rotaciona variação a cada loop: 0,1,2,3,4,5,0,1,2,3,4,5...
+    const variant = musicLoopCount % 6;
+    const m = variant === 0 ? baseMelody : makeVariedMelody(baseMelody, variant);
+    musicLoopCount++;
     const beat = m.beat;
     const start = musicNextStart;
     const len = m.length;
@@ -1745,30 +2016,20 @@
   function stopMusic() {
     musicPlaying = false;
     if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+    stopMp3Playlist();  // para MP3 também
   }
 
-  // 🎵 Música frenética do modo garra — sobrescreve melodia temporariamente
+  // 🎵 Música frenética do modo garra — desativada (usamos playlist MP3)
   let preFreneticMelodyId = null;
   const FRENETIC_MELODY = {
     notes: [440, 523, 659, 880, 659, 880, 523, 659, 440, 523, 880, 1047],
-    bass: 110, type: 'square', beat: 0.14,  // tempo bem rápido
+    bass: 110, type: 'square', beat: 0.14,
   };
   function startFreneticMusic() {
-    preFreneticMelodyId = currentMelodyId;
-    MELODIES.__frenetic__ = FRENETIC_MELODY;
-    currentMelodyId = '__frenetic__';
-    // Reinicia o scheduler pra pegar o novo beat
-    if (musicPlaying && audioCtx) {
-      stopMusic();
-      startMusic();
-    }
+    // No-op: playlist MP3 continua tocando normal
   }
   function stopFreneticMusic() {
-    if (preFreneticMelodyId) {
-      currentMelodyId = preFreneticMelodyId;
-      preFreneticMelodyId = null;
-      if (audioCtx && !musicPlaying) startMusic();
-    }
+    // No-op
   }
 
   function toggleMute() {
@@ -1776,6 +2037,7 @@
     if (masterGain) masterGain.gain.value = muted ? 0 : 1;
     // Mute também o audio do tema, se estiver tocando
     if (currentThemeAudio) currentThemeAudio.volume = muted ? 0 : 0.55;
+    updateMp3Mute();  // MP3 playlist também
     document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
   }
 
@@ -2279,6 +2541,60 @@
       });
       setTimeout(() => finish(true), 4000);
     } catch (e) { finish(true); }
+  }
+
+  // ============================================================
+  // 📖 TUTORIAL — sequência de dicas com o jogo pausado
+  // ============================================================
+  const TUTORIAL_STEPS = [
+    { icon: '👆', title: 'MOVIMENTO', text: 'Arrasta o dedo pros LADOS pra trocar de pista.<br>Deslize pra CIMA pra pular, pra BAIXO pra deslizar.' },
+    { icon: '❤️', title: '7 VIDAS', text: 'Você começa com 7 corações. Cada batida perde 1.<br>Pegue corações no cenário pra recuperar!' },
+    { icon: '🥛', title: 'CAIXA DE LEITE = TURBO', text: 'Pega a caixa de leite e o Beto entra em MODO TURBO por 6 segundos!<br>Fica invencível e super veloz.' },
+    { icon: '🐾', title: 'GARRAS DE FÚRIA', text: 'Pega o item de garra e vira o jogo! Ataca guardas por 12 segundos.<br>Ouça a música mudar — é hora de caçar!' },
+    { icon: '🐦', title: 'PASSARINHOS', text: 'Coleta passarinhos pra somar pontos.<br>Alguns aparecem em pontos difíceis — vale o risco!' },
+    { icon: '🦇', title: 'PODER: CAPA', text: 'Selecione a Capa no menu antes de jogar. Toque no ícone durante o jogo pra VOAR por 8 segundos, imune a tudo!' },
+    { icon: '🎀', title: 'PODER: LAÇO ROSA', text: 'Desenhe com o dedo na tela pra CORTAR e destruir tudo que atravessar!<br>Perfeito pra abrir caminho.' },
+    { icon: '👁️', title: 'PODER: LASER', text: 'Dispara feixe de laser dos olhos! Desenhe na tela pra mirar e destruir obstáculos à distância.' },
+    { icon: '⏸️', title: 'PAUSE / PLAY', text: 'A qualquer momento, aperta o botão de pause no canto pra pausar o jogo. Toque pra jogar de novo!' },
+    { icon: '🌍', title: '7 MUNDOS', text: 'Brasil, Egito, China, Arábia, França, Londres e Japão!<br>Cada mundo tem inimigos únicos e música própria.' },
+    { icon: '🎯', title: 'PRONTO?', text: 'Agora bora ajudar o Beto a fugir do cachorrão!<br>Boa sorte 🐱💨' },
+  ];
+  let tutorialStep = 0;
+
+  function openTutorial() {
+    tutorialStep = 0;
+    renderTutorialStep();
+    const ss = document.getElementById('start-screen');
+    if (ss) ss.classList.add('hidden');
+    document.getElementById('tutorial-overlay').classList.remove('hidden');
+  }
+  function closeTutorial() {
+    document.getElementById('tutorial-overlay').classList.add('hidden');
+    const ss = document.getElementById('start-screen');
+    if (ss) ss.classList.remove('hidden');
+  }
+  function renderTutorialStep() {
+    const s = TUTORIAL_STEPS[tutorialStep];
+    document.getElementById('tut-icon').textContent = s.icon;
+    document.getElementById('tut-title').textContent = s.title;
+    document.getElementById('tut-text').innerHTML = s.text;
+    const dotsEl = document.getElementById('tut-dots');
+    dotsEl.innerHTML = '';
+    for (let i = 0; i < TUTORIAL_STEPS.length; i++) {
+      const d = document.createElement('div');
+      d.className = 'tut-dot' + (i === tutorialStep ? ' active' : '');
+      dotsEl.appendChild(d);
+    }
+    const btn = document.getElementById('tut-next');
+    btn.textContent = tutorialStep === TUTORIAL_STEPS.length - 1 ? '✓ ENTENDI!' : 'PRÓXIMO ▶';
+  }
+  function nextTutorialStep() {
+    if (tutorialStep < TUTORIAL_STEPS.length - 1) {
+      tutorialStep++;
+      renderTutorialStep();
+    } else {
+      closeTutorial();
+    }
   }
 
   // ============================================================
@@ -5208,6 +5524,12 @@
   // start-btn = começa o jogo
   document.getElementById('start-btn').addEventListener('click', () => tryPrerollThenStart());
   document.getElementById('start-btn').addEventListener('touchend', e => { e.preventDefault(); tryPrerollThenStart(); });
+
+  // Tutorial
+  document.getElementById('tutorial-btn').addEventListener('click', openTutorial);
+  document.getElementById('tutorial-btn').addEventListener('touchend', e => { e.preventDefault(); openTutorial(); });
+  document.getElementById('tut-next').addEventListener('click', nextTutorialStep);
+  document.getElementById('tut-next').addEventListener('touchend', e => { e.preventDefault(); nextTutorialStep(); });
 
   document.getElementById('restart-btn').addEventListener('click', restartGameWithAd);
   document.getElementById('restart-btn').addEventListener('touchend', e => { e.preventDefault(); restartGameWithAd(); });
