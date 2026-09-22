@@ -14,14 +14,14 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
       - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools platforms;android-35 build-tools;35.0.0
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
       - run: npm install
       - run: npx cap add android || echo "ja adicionado"
       - name: AdMob Manifest
@@ -48,12 +48,12 @@ jobs:
             echo "icon.png nao encontrado em resources/"
           fi
 
-      - name: Atualiza para API 35
+      - name: Atualiza para API 36 (requisito Google Play)
         run: |
           V=android/variables.gradle
           if [ -f "$V" ]; then
-            sed -i "s/compileSdkVersion = [0-9]*/compileSdkVersion = 35/" "$V"
-            sed -i "s/targetSdkVersion = [0-9]*/targetSdkVersion = 35/" "$V"
+            sed -i "s/compileSdkVersion = [0-9]*/compileSdkVersion = 36/" "$V"
+            sed -i "s/targetSdkVersion = [0-9]*/targetSdkVersion = 36/" "$V"
             cat "$V"
           fi
       - name: Bump versionCode
